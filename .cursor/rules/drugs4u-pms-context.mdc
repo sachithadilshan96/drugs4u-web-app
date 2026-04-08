@@ -1,0 +1,45 @@
+---
+description: Drugs 4U PMS case study context, requirements, and delivery expectations
+alwaysApply: true
+---
+
+# Drugs 4U — Prescription Management System (PMS)
+
+## Business context
+
+- **Pharma V**: UK bespoke enterprise software (founded 2020); pharmacists + developers; patient care and safety.
+- **Client**: **Drugs 4U**, Staffordshire — digital transformation from **paper-based** store processes.
+- **Product**: **Prescription Management System (PMS)** for in-store use.
+- **Process**: Work with **Product Owner** over weeks; **SCRUM** roles and artifacts; **working prototype** by assignment deadline (COMP70047 Enterprise Systems, Staffordshire).
+
+## Functional requirements (implement and design toward these)
+
+1. **Prescription / orders**
+   - Registered customers can **purchase medicine**; system **accesses and verifies customer data** before allowing medication.
+   - **Customer DB**: name, address, age, DOB; **medication history**; **allergies** and **medical conditions**.
+
+2. **Inventory (per store)**
+   - Medicines: **name**, **quantity**, **expiry date** (per store).
+
+3. **Reporting**
+   - Prescriptions by **date**, **customer**, **stock item**.
+
+4. **Risk / alerts**
+   - **Fraud / compliance**: e.g. products requiring **ID / DOB check** → **flag** request and **alert counter staff**.
+   - **Stock**: if quantity is below threshold (e.g. fewer than 10 units) → **on-screen pop-up / alert**.
+
+## Assignment expectations
+
+- **Describe** application features and **how they reduce risk**.
+- Address **ethical** and **security** challenges of development and **mitigations**.
+- Deliver **artifacts** appropriate to Scrum + PO elicitation (as the user’s plan specifies step-by-step).
+
+## Technical stack (this repo)
+
+- **Laravel 13**, **MySQL**, **React** + **Vite**, **Tailwind v4**, **shadcn/ui**; SPA entry `resources/views/app.blade.php` + `resources/js/app.jsx`.
+- Setup: [REQUIREMENTS.md](REQUIREMENTS.md), [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Agent behaviour
+
+- When the user gives **step-by-step** instructions from the project plan, **execute those steps** in order and align code, docs, and artifacts with the case study above.
+- Prefer **UK pharmacy / healthcare** sensitivity: data minimisation, audit trails, role-based access, and clear consent boundaries where relevant.
