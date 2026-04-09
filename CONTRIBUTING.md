@@ -96,7 +96,11 @@ npm run dev
 
 Then open `APP_URL` in the browser (e.g. `http://127.0.0.1:8000`).
 
-After `php artisan migrate --seed`, you can sign in at `/login` with the default seeded user (**`counter1`** / **`password`**) from `DatabaseSeeder`, unless you change it.
+After `php artisan migrate --seed`, you can sign in at `/login` with any seeded staff account (all use password **`password`**):
+
+- **`admin`** — admin role  
+- **`john`** — pharmacist  
+- **`sarah`** — manager
 
 ### Optional: one command
 
