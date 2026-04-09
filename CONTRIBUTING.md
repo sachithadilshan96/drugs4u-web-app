@@ -96,6 +96,8 @@ npm run dev
 
 Then open `APP_URL` in the browser (e.g. `http://127.0.0.1:8000`).
 
+After `php artisan migrate --seed`, you can sign in at `/login` with the default seeded user (**`test@example.com`** / **`password`**) from `DatabaseSeeder`, unless you change it.
+
 ### Optional: one command
 
 After `npm install`, you can start Laravel, queue worker, logs, and Vite together:
