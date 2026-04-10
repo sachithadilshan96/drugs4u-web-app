@@ -1,44 +1,45 @@
 import { create } from 'zustand';
 import * as authApi from '../api/auth';
 
-export const useAuthStore = create((set) => ({
+export const useAuthStore = create((set, get) => ({
     user: null,
     isAuthenticated: false,
-    initializing: true,
+    /** False until the first `loadUser()` run finishes (session restore). */
+    authReady: false,
 
     setUser: (user) =>
         set({
             user,
             isAuthenticated: !!user,
-            initializing: false,
         }),
 
-    bootstrap: async () => {
-        set({ initializing: true });
-        try {
-            const { data } = await authApi.fetchUser();
-            set({ user: data, isAuthenticated: true, initializing: false });
-        } catch {
-            set({ user: null, isAuthenticated: false, initializing: false });
-        }
-    },
+    clearUser: () =>
+        set({
+            user: null,
+            isAuthenticated: false,
+        }),
 
-    login: async (credentials) => {
+    /**
+     * Restore session from GET /api/me (Sanctum cookie session).
+     */
+    loadUser: async () => {
         try {
-            await authApi.fetchCsrfCookie();
+            const { status, data } = await authApi.fetchUser();
+            if (status === 200 && data && typeof data === 'object') {
+                set({ user: data, isAuthenticated: true, authReady: true });
+                return;
+            }
         } catch {
-            // Sanctum may not be installed yet; login route may still issue session + XSRF cookie.
+            // Network / server error
         }
-        await authApi.login(credentials);
-        const { data } = await authApi.fetchUser();
-        set({ user: data, isAuthenticated: true, initializing: false });
+        set({ user: null, isAuthenticated: false, authReady: true });
     },
 
     logout: async () => {
         try {
             await authApi.logout();
         } finally {
-            set({ user: null, isAuthenticated: false, initializing: false });
+            get().clearUser();
         }
     },
 }));
