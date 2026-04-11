@@ -7,6 +7,7 @@
 
 /** @type {Array<{ prefix: string; roles: StaffRole[] }>} */
 const PATH_PREFIX_ROLES = [
+    { prefix: '/admin', roles: ['admin'] },
     { prefix: '/alerts', roles: ['admin'] },
     { prefix: '/reports', roles: ['manager', 'admin'] },
     { prefix: '/customers', roles: ['pharmacist', 'admin'] },
@@ -56,6 +57,7 @@ const TITLE_RULES = [
     { pattern: /^\/inventory\/?$/, title: 'Inventory' },
     { pattern: /^\/reports\/?$/, title: 'Reports' },
     { pattern: /^\/alerts\/?$/, title: 'Alerts log' },
+    { pattern: /^\/admin\/users\/?$/, title: 'User Management' },
 ];
 
 /**

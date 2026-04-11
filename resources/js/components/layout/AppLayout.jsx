@@ -39,7 +39,7 @@ function SidebarNav({ role, onNavigate }) {
     const items = NAV_ITEMS.filter((item) => role && item.roles.includes(role));
 
     return (
-        <nav className="flex flex-1 flex-col gap-0.5 px-2 py-2" aria-label="Main">
+        <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-2 py-2" aria-label="Main">
             {items.map(({ to, label, end }) => (
                 <NavLink
                     key={to}
@@ -52,6 +52,16 @@ function SidebarNav({ role, onNavigate }) {
                 </NavLink>
             ))}
         </nav>
+    );
+}
+
+function SidebarAdminLink({ onNavigate }) {
+    return (
+        <div className="px-2 pb-2">
+            <NavLink to="/admin/users" className={navClass} onClick={() => onNavigate?.()}>
+                User Management
+            </NavLink>
+        </div>
     );
 }
 
@@ -110,7 +120,15 @@ export function AppLayout() {
                         <div className="text-[11px] font-medium uppercase tracking-wider text-teal-400/90">PMS</div>
                     </div>
                 </div>
-                <SidebarNav role={role} />
+                <div className="flex min-h-0 flex-1 flex-col">
+                    <SidebarNav role={role} />
+                    {role === 'admin' ? (
+                        <>
+                            <div className="mx-3 my-2 border-t border-slate-700/80" role="separator" />
+                            <SidebarAdminLink />
+                        </>
+                    ) : null}
+                </div>
                 <SidebarFooter role={role} onLogout={() => logout()} />
             </aside>
 
@@ -128,6 +146,12 @@ export function AppLayout() {
                     </DialogHeader>
                     <div className="flex min-h-0 flex-1 flex-col">
                         <SidebarNav role={role} onNavigate={() => setMobileOpen(false)} />
+                        {role === 'admin' ? (
+                            <>
+                                <div className="mx-3 my-2 border-t border-slate-700/80" role="separator" />
+                                <SidebarAdminLink onNavigate={() => setMobileOpen(false)} />
+                            </>
+                        ) : null}
                         <SidebarFooter
                             role={role}
                             onLogout={() => {
