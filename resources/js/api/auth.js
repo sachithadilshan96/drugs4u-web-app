@@ -9,7 +9,11 @@ export function fetchCsrfCookie() {
 }
 
 export function login(credentials) {
-    return api.post('/login', credentials);
+    return api.post('/login', {
+        username: credentials.username,
+        password: credentials.password,
+        remember: credentials.remember ?? false,
+    });
 }
 
 export function logout() {

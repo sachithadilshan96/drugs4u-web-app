@@ -2,6 +2,6 @@
 
 use Illuminate\Support\Facades\Route;
 
-Route::view('/', 'app');
+Route::get('/', fn () => view('app'));
 
-Route::view('/{any}', 'app')->where('any', '^(?!api(?:/|$)).*$');
+Route::get('/{any}', fn () => view('app'))->where('any', '.*');

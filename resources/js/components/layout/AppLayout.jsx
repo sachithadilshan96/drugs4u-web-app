@@ -14,7 +14,9 @@ export function AppLayout() {
                 <header className="flex h-14 items-center justify-between border-b border-border px-6">
                     <span className="text-sm text-muted-foreground">Pharma V · Prescription Management</span>
                     <div className="flex items-center gap-3">
-                        <span className="text-sm text-foreground">{user?.name ?? user?.email ?? 'Staff'}</span>
+                        <span className="text-sm text-foreground">
+                            {user?.name ?? user?.username ?? 'Staff'}
+                        </span>
                         <Button variant="outline" size="sm" type="button" onClick={() => logout()}>
                             Sign out
                         </Button>

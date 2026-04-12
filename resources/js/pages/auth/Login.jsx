@@ -13,7 +13,7 @@ export default function Login() {
     const initializing = useAuthStore((s) => s.initializing);
     const login = useAuthStore((s) => s.login);
 
-    const [email, setEmail] = useState('');
+    const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
@@ -35,7 +35,7 @@ export default function Login() {
         setError('');
         setLoading(true);
         try {
-            await login({ email, password });
+            await login({ username, password });
             navigate('/dashboard', { replace: true });
         } catch (err) {
             setError(err.response?.data?.message ?? 'Unable to sign in. Check API routes and credentials.');
@@ -59,13 +59,13 @@ export default function Login() {
                             </Alert>
                         ) : null}
                         <div className="space-y-2">
-                            <Label htmlFor="email">Email</Label>
+                            <Label htmlFor="username">Username</Label>
                             <Input
-                                id="email"
-                                type="email"
+                                id="username"
+                                type="text"
                                 autoComplete="username"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
+                                value={username}
+                                onChange={(e) => setUsername(e.target.value)}
                                 required
                             />
                         </div>
