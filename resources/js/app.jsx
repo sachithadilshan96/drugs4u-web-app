@@ -19,6 +19,7 @@ import NewPrescription from '@/pages/prescriptions/NewPrescription';
 import InventoryList from '@/pages/inventory/InventoryList';
 import Reports from '@/pages/reports/Reports';
 import AlertsLog from '@/pages/alerts/AlertsLog';
+import UserManagement from '@/pages/admin/UserManagement';
 
 function AuthBootstrap() {
     const loadUser = useAuthStore((s) => s.loadUser);
@@ -50,6 +51,7 @@ function AppRoutes() {
                         <Route path="/inventory" element={<InventoryList />} />
                         <Route path="/reports" element={<Reports />} />
                         <Route path="/alerts" element={<AlertsLog />} />
+                        <Route path="/admin/users" handle={{ requiredRole: 'admin' }} element={<UserManagement />} />
                         <Route path="*" element={<Navigate to="/dashboard" replace />} />
                     </Route>
                 </Route>
