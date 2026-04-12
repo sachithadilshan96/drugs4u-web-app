@@ -11,6 +11,8 @@
 
 Runtime versions (PHP, Node, Composer, MySQL, extensions) are documented in [REQUIREMENTS.md](./REQUIREMENTS.md). Use **`composer.lock`** and **`package-lock.json`** for reproducible installs (`composer install`, `npm ci`).
 
+**New contributors:** follow [CONTRIBUTING.md](./CONTRIBUTING.md) for clone-to-running steps (`.env`, MySQL, migrations, `npm install`, `php artisan serve`, `npm run dev`).
+
 ## About Laravel
 
 Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
