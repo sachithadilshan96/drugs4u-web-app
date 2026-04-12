@@ -28,7 +28,8 @@ class DatabaseSeeder extends Seeder
             Prescription::query()->delete();
             Inventory::query()->delete();
             CustomerHealth::query()->delete();
-            Customer::query()->delete();
+            // Hard-delete customers so unique phone constraints reset (models use SoftDeletes).
+            DB::table('customers')->delete();
             Medicine::query()->delete();
             AlertLog::query()->delete();
             User::query()->delete();
