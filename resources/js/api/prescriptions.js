@@ -1,7 +1,19 @@
 import api from './axios';
 
-export const fetchPrescriptions = (params) => api.get('/prescriptions', { params });
+/**
+ * @param {Record<string, string | number | undefined>} [params]
+ */
+export function listPrescriptions(params) {
+    return api.get('/prescriptions', { params });
+}
 
-export const fetchPrescription = (id) => api.get(`/prescriptions/${id}`);
+export function getPrescription(id) {
+    return api.get(`/prescriptions/${id}`);
+}
 
-export const createPrescription = (payload) => api.post('/prescriptions', payload);
+/**
+ * @param {{ customer_id: number; notes?: string; status?: string; items: Array<{ medicine_id: number; quantity: number }> }} data
+ */
+export function createPrescription(data) {
+    return api.post('/prescriptions', data);
+}

@@ -27,6 +27,7 @@ class PrescriptionController extends Controller
                 'customer:id,full_name',
                 'pharmacist:id,name',
             ])
+            ->withCount('items')
             ->orderByDesc('created_at');
 
         if ($request->filled('status')) {
@@ -53,6 +54,7 @@ class PrescriptionController extends Controller
                 'pharmacist_name' => $p->pharmacist?->name,
                 'status' => $p->status,
                 'notes' => $p->notes,
+                'items_count' => (int) ($p->items_count ?? 0),
                 'created_at' => $p->created_at?->toIso8601String(),
                 'updated_at' => $p->updated_at?->toIso8601String(),
             ];

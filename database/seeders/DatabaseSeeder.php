@@ -215,20 +215,26 @@ class DatabaseSeeder extends Seeder
                 'dispensed_qty' => 1,
             ]);
 
-            MedicationHistory::query()->create([
-                'customer_id' => $customers[3]->id,
-                'prescription_id' => $p2->id,
-                'medicine_id' => $byName['Amoxicillin']->id,
-                'dispensed_at' => now()->subDays(2),
-                'qty' => 1,
-            ]);
-            MedicationHistory::query()->create([
-                'customer_id' => $customers[6]->id,
-                'prescription_id' => $p5->id,
-                'medicine_id' => $byName['Simvastatin']->id,
-                'dispensed_at' => now()->subDay(),
-                'qty' => 1,
-            ]);
+            $p2DispensedAt = now()->subDays(2);
+            foreach (['Amoxicillin', 'Ibuprofen'] as $medName) {
+                MedicationHistory::query()->create([
+                    'customer_id' => $customers[3]->id,
+                    'prescription_id' => $p2->id,
+                    'medicine_id' => $byName[$medName]->id,
+                    'dispensed_at' => $p2DispensedAt,
+                    'qty' => 1,
+                ]);
+            }
+            $p5DispensedAt = now()->subDay();
+            foreach (['Simvastatin', 'Amlodipine', 'Gabapentin'] as $medName) {
+                MedicationHistory::query()->create([
+                    'customer_id' => $customers[6]->id,
+                    'prescription_id' => $p5->id,
+                    'medicine_id' => $byName[$medName]->id,
+                    'dispensed_at' => $p5DispensedAt,
+                    'qty' => 1,
+                ]);
+            }
 
             AlertLog::query()->create([
                 'alert_type' => 'low_stock',
