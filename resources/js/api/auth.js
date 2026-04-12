@@ -21,5 +21,5 @@ export function logout() {
 }
 
 export function fetchUser() {
-    return api.get('/user');
+    return api.get('/me');
 }
