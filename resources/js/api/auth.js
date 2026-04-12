@@ -21,5 +21,8 @@ export function logout() {
 }
 
 export function fetchUser() {
-    return api.get('/me');
+    return api.get('/me', {
+        skipAuthRedirect: true,
+        validateStatus: (status) => status === 200 || status === 401,
+    });
 }

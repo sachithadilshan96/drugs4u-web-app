@@ -21,11 +21,11 @@ import Reports from '@/pages/reports/Reports';
 import AlertsLog from '@/pages/alerts/AlertsLog';
 
 function AuthBootstrap() {
-    const bootstrap = useAuthStore((s) => s.bootstrap);
+    const loadUser = useAuthStore((s) => s.loadUser);
 
     useEffect(() => {
-        bootstrap();
-    }, [bootstrap]);
+        loadUser();
+    }, [loadUser]);
 
     return null;
 }
@@ -40,16 +40,16 @@ function AppRoutes() {
 
                 <Route element={<ProtectedRoute />}>
                     <Route element={<AppLayout />}>
-                        <Route path="dashboard" element={<Dashboard />} />
-                        <Route path="customers" element={<CustomerList />} />
-                        <Route path="customers/new" element={<CustomerForm />} />
-                        <Route path="customers/:id/edit" element={<CustomerForm />} />
-                        <Route path="customers/:id" element={<CustomerView />} />
-                        <Route path="prescriptions" element={<PrescriptionList />} />
-                        <Route path="prescriptions/new" element={<NewPrescription />} />
-                        <Route path="inventory" element={<InventoryList />} />
-                        <Route path="reports" element={<Reports />} />
-                        <Route path="alerts" element={<AlertsLog />} />
+                        <Route path="/dashboard" element={<Dashboard />} />
+                        <Route path="/customers" element={<CustomerList />} />
+                        <Route path="/customers/new" element={<CustomerForm />} />
+                        <Route path="/customers/:id/edit" element={<CustomerForm />} />
+                        <Route path="/customers/:id" element={<CustomerView />} />
+                        <Route path="/prescriptions" element={<PrescriptionList />} />
+                        <Route path="/prescriptions/new" element={<NewPrescription />} />
+                        <Route path="/inventory" element={<InventoryList />} />
+                        <Route path="/reports" element={<Reports />} />
+                        <Route path="/alerts" element={<AlertsLog />} />
                         <Route path="*" element={<Navigate to="/dashboard" replace />} />
                     </Route>
                 </Route>
