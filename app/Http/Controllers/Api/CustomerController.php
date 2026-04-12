@@ -19,7 +19,7 @@ class CustomerController extends Controller
      */
     public function index(Request $request): CustomerCollection
     {
-        $query = Customer::query()->orderBy('full_name');
+        $query = Customer::query()->with('customerHealth')->orderBy('full_name');
 
         if ($request->filled('search')) {
             $term = $request->string('search')->trim()->value();

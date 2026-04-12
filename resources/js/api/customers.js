@@ -1,11 +1,41 @@
 import api from './axios';
 
-export const fetchCustomers = (params) => api.get('/customers', { params });
+/**
+ * @param {number} [page]
+ * @param {string} [search]
+ */
+export function getCustomers(page = 1, search = '') {
+    const params = { page };
+    const s = typeof search === 'string' ? search.trim() : '';
+    if (s) {
+        params.search = s;
+    }
+    return api.get('/customers', { params });
+}
 
-export const fetchCustomer = (id) => api.get(`/customers/${id}`);
+export function getCustomer(id) {
+    return api.get(`/customers/${id}`);
+}
 
-export const createCustomer = (payload) => api.post('/customers', payload);
+export function createCustomer(data) {
+    return api.post('/customers', data);
+}
 
-export const updateCustomer = (id, payload) => api.put(`/customers/${id}`, payload);
+export function updateCustomer(id, data) {
+    return api.put(`/customers/${id}`, data);
+}
 
-export const deleteCustomer = (id) => api.delete(`/customers/${id}`);
+export function saveHealth(customerId, data) {
+    return api.post(`/customers/${customerId}/health`, data);
+}
+
+/**
+ * @param {string} query
+ */
+export function searchCustomers(query) {
+    const trimmed = String(query ?? '').trim();
+    if (!trimmed) {
+        return Promise.resolve({ data: [] });
+    }
+    return api.get(`/customers/search/${encodeURIComponent(trimmed)}`);
+}
