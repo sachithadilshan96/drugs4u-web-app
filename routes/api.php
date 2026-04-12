@@ -3,6 +3,8 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\CustomerHealthController;
+use App\Http\Controllers\Api\InventoryController;
+use App\Http\Controllers\Api\PrescriptionController;
 use App\Http\Controllers\Api\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -16,6 +18,12 @@ Route::middleware('auth:sanctum')->group(function (): void {
         ->where('query', '[^/]*');
     Route::post('customers/{customer}/health', [CustomerHealthController::class, 'upsert']);
     Route::apiResource('customers', CustomerController::class);
+
+    Route::patch('prescriptions/{prescription}/status', [PrescriptionController::class, 'updateStatus']);
+    Route::apiResource('prescriptions', PrescriptionController::class)->only(['index', 'store', 'show', 'destroy']);
+
+    Route::get('inventory/low-stock', [InventoryController::class, 'lowStock']);
+    Route::apiResource('inventory', InventoryController::class);
 
     Route::middleware('role.admin')->group(function (): void {
         Route::apiResource('users', UserController::class)->only(['index', 'store', 'destroy']);
