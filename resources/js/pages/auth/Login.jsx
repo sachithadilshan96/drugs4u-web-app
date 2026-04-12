@@ -23,8 +23,11 @@ export default function Login() {
 
     if (!authReady) {
         return (
-            <div className="flex min-h-dvh items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-cyan-950 text-slate-300">
+            <div className="flex min-h-dvh flex-col items-center justify-center gap-3 bg-gradient-to-br from-slate-950 via-slate-900 to-cyan-950 text-slate-300">
                 <Loader2 className="size-8 animate-spin text-teal-400" aria-hidden />
+                <p className="text-sm text-slate-400" role="status">
+                    Checking session…
+                </p>
             </div>
         );
     }

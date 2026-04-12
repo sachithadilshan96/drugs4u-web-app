@@ -1,21 +1,20 @@
 import { useLayoutEffect, useMemo, useRef } from 'react';
-import { Navigate, Outlet, useLocation, useMatches } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/store/authStore';
-import { canAccessPath } from '@/lib/routeAccess';
+import { canAccessPath, requiredRoleForSoftRedirect } from '@/lib/routeAccess';
 import Forbidden from '@/pages/errors/Forbidden';
 
 export function ProtectedRoute() {
     const location = useLocation();
-    const matches = useMatches();
     const authReady = useAuthStore((s) => s.authReady);
     const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
     const user = useAuthStore((s) => s.user);
 
     const requiredRole = useMemo(
-        () => [...matches].reverse().find((m) => m.handle?.requiredRole)?.handle?.requiredRole,
-        [matches],
+        () => requiredRoleForSoftRedirect(location.pathname),
+        [location.pathname],
     );
 
     const deniedToastSent = useRef(false);
