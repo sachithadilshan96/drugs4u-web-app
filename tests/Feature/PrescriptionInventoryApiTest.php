@@ -89,7 +89,8 @@ class PrescriptionInventoryApiTest extends TestCase
         $customer = Customer::factory()->create();
         CustomerHealth::query()->create([
             'customer_id' => $customer->id,
-            'allergy_list' => 'Codeine',
+            'medication_allergies' => 'Codeine',
+            'other_allergies' => null,
             'medical_conditions' => null,
             'notes' => null,
         ]);
@@ -101,6 +102,45 @@ class PrescriptionInventoryApiTest extends TestCase
                 ['medicine_id' => $medicine->id, 'quantity' => 1],
             ],
         ])->assertStatus(422)->assertJsonPath('message', 'Potential allergy conflict for one or more medicines.');
+    }
+
+    public function test_prescription_other_allergies_field_is_not_used_for_medication_conflict(): void
+    {
+        $user = User::factory()->create([
+            'username' => 'pharm2b',
+            'password' => Hash::make('password'),
+            'role' => 'pharmacist',
+        ]);
+        $this->loginAs($user);
+
+        $medicine = Medicine::query()->create([
+            'name' => 'Codeine Linctus',
+            'description' => 'Test',
+            'requires_age_check' => true,
+            'min_age' => 18,
+        ]);
+        Inventory::query()->create([
+            'medicine_id' => $medicine->id,
+            'quantity' => 50,
+            'expiry_date' => now()->addYear()->toDateString(),
+        ]);
+
+        $customer = Customer::factory()->create();
+        CustomerHealth::query()->create([
+            'customer_id' => $customer->id,
+            'medication_allergies' => null,
+            'other_allergies' => 'Codeine',
+            'medical_conditions' => null,
+            'notes' => null,
+        ]);
+
+        $this->postJson('/api/prescriptions', [
+            'customer_id' => $customer->id,
+            'status' => 'dispensed',
+            'items' => [
+                ['medicine_id' => $medicine->id, 'quantity' => 1],
+            ],
+        ])->assertCreated();
     }
 
     public function test_dispensed_prescription_decrements_stock_and_returns_age_warnings(): void

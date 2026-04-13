@@ -104,17 +104,18 @@ class DatabaseSeeder extends Seeder
             ])->map(fn (array $row) => Customer::query()->create($row));
 
             $healthRows = [
-                ['allergy_list' => 'Penicillin', 'medical_conditions' => 'Asthma', 'notes' => 'Carries reliever inhaler'],
-                ['allergy_list' => 'Aspirin, Codeine', 'medical_conditions' => 'Hypertension', 'notes' => 'Monitor BP'],
-                ['allergy_list' => 'Penicillin, Aspirin', 'medical_conditions' => 'Type 2 diabetes', 'notes' => 'Metformin ongoing'],
-                ['allergy_list' => 'Codeine', 'medical_conditions' => null, 'notes' => 'History of nausea with opioids'],
-                ['allergy_list' => 'Aspirin', 'medical_conditions' => 'CKD stage 3', 'notes' => 'Avoid nephrotoxic NSAIDs where possible'],
+                ['medical_conditions' => 'Asthma', 'notes' => 'Carries reliever inhaler'],
+                ['medical_conditions' => 'Hypertension', 'notes' => 'Monitor BP'],
+                ['medical_conditions' => 'Type 2 diabetes', 'notes' => 'Metformin ongoing'],
+                ['medical_conditions' => null, 'notes' => 'History of nausea with opioids'],
+                ['medical_conditions' => 'CKD stage 3', 'notes' => 'Avoid nephrotoxic NSAIDs where possible'],
             ];
 
             foreach ($customers->take(5)->values() as $index => $customer) {
                 CustomerHealth::query()->create([
                     'customer_id' => $customer->id,
-                    'allergy_list' => $healthRows[$index]['allergy_list'],
+                    'medication_allergies' => 'Penicillin, Codeine',
+                    'other_allergies' => 'Peanuts, Latex',
                     'medical_conditions' => $healthRows[$index]['medical_conditions'],
                     'notes' => $healthRows[$index]['notes'],
                 ]);

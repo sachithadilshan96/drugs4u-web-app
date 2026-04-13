@@ -16,7 +16,8 @@ class CustomerHealthController extends Controller
     public function upsert(Request $request, Customer $customer): JsonResponse
     {
         $validated = $request->validate([
-            'allergy_list' => ['nullable', 'string', 'max:65535'],
+            'medication_allergies' => ['nullable', 'string', 'max:65535'],
+            'other_allergies' => ['nullable', 'string', 'max:65535'],
             'medical_conditions' => ['nullable', 'string', 'max:65535'],
             'notes' => ['nullable', 'string', 'max:65535'],
         ]);
@@ -29,7 +30,8 @@ class CustomerHealthController extends Controller
         return response()->json([
             'id' => $health->id,
             'customer_id' => $health->customer_id,
-            'allergy_list' => $health->allergy_list,
+            'medication_allergies' => $health->medication_allergies,
+            'other_allergies' => $health->other_allergies,
             'medical_conditions' => $health->medical_conditions,
             'notes' => $health->notes,
             'updated_at' => $health->updated_at?->toIso8601String(),

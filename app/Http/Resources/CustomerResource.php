@@ -31,7 +31,8 @@ class CustomerResource extends JsonResource
 
                 return [
                     'id' => $this->customerHealth->id,
-                    'allergy_list' => $this->customerHealth->allergy_list,
+                    'medication_allergies' => $this->customerHealth->medication_allergies,
+                    'other_allergies' => $this->customerHealth->other_allergies,
                     'medical_conditions' => $this->customerHealth->medical_conditions,
                     'notes' => $this->customerHealth->notes,
                 ];

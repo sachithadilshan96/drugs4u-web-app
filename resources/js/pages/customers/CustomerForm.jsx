@@ -6,6 +6,7 @@ import * as customersApi from '@/api/customers';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 function validate(values) {
@@ -46,6 +47,12 @@ export default function CustomerForm() {
         email: '',
     });
     const [errors, setErrors] = useState({});
+    const [healthFields, setHealthFields] = useState({
+        medication_allergies: '',
+        other_allergies: '',
+        medical_conditions: '',
+        notes: '',
+    });
 
     useEffect(() => {
         if (!isEdit) {
@@ -66,6 +73,12 @@ export default function CustomerForm() {
                     dob: c.dob ?? '',
                     phone: c.phone ?? '',
                     email: c.email ?? '',
+                });
+                setHealthFields({
+                    medication_allergies: c.health?.medication_allergies ?? '',
+                    other_allergies: c.health?.other_allergies ?? '',
+                    medical_conditions: c.health?.medical_conditions ?? '',
+                    notes: c.health?.notes ?? '',
                 });
             } catch (e) {
                 toast.error(e.response?.data?.message ?? 'Could not load customer.');
@@ -102,11 +115,29 @@ export default function CustomerForm() {
             email: values.email.trim() || null,
         };
         try {
+            const healthPayload = {
+                medication_allergies: healthFields.medication_allergies.trim() || null,
+                other_allergies: healthFields.other_allergies.trim() || null,
+                medical_conditions: healthFields.medical_conditions.trim() || null,
+                notes: healthFields.notes.trim() || null,
+            };
+            const hasHealthInput =
+                healthPayload.medication_allergies ||
+                healthPayload.other_allergies ||
+                healthPayload.medical_conditions ||
+                healthPayload.notes;
+
             if (isEdit) {
                 await customersApi.updateCustomer(id, payload);
+                await customersApi.saveHealth(id, healthPayload);
                 toast.success('Customer updated.');
             } else {
-                await customersApi.createCustomer(payload);
+                const { data: created } = await customersApi.createCustomer(payload);
+                const c = created.data ?? created;
+                const newId = c.id;
+                if (newId && hasHealthInput) {
+                    await customersApi.saveHealth(newId, healthPayload);
+                }
                 toast.success('Customer created.');
             }
             navigate('/customers', { replace: true });
@@ -219,6 +250,57 @@ export default function CustomerForm() {
                             </Button>
                         </div>
                     </form>
+                </CardContent>
+            </Card>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle className="text-lg">Allergy information</CardTitle>
+                    <CardDescription>Optional clinical details stored with this customer.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="medication_allergies">Medication allergies</Label>
+                        <Textarea
+                            id="medication_allergies"
+                            rows={3}
+                            value={healthFields.medication_allergies}
+                            onChange={(e) => setHealthFields((f) => ({ ...f, medication_allergies: e.target.value }))}
+                            placeholder="e.g. Penicillin, NSAIDs, Codeine, Aspirin…"
+                        />
+                        <p className="text-xs text-muted-foreground">Used for automatic prescription safety checks.</p>
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="other_allergies">Other allergies</Label>
+                        <Textarea
+                            id="other_allergies"
+                            rows={3}
+                            value={healthFields.other_allergies}
+                            onChange={(e) => setHealthFields((f) => ({ ...f, other_allergies: e.target.value }))}
+                            placeholder="e.g. Peanuts, Latex, Contrast dye, Shellfish…"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                            Displayed for reference only — not checked against prescriptions.
+                        </p>
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="medical_conditions">Medical conditions</Label>
+                        <Textarea
+                            id="medical_conditions"
+                            rows={3}
+                            value={healthFields.medical_conditions}
+                            onChange={(e) => setHealthFields((f) => ({ ...f, medical_conditions: e.target.value }))}
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="health_notes">Notes</Label>
+                        <Textarea
+                            id="health_notes"
+                            rows={2}
+                            value={healthFields.notes}
+                            onChange={(e) => setHealthFields((f) => ({ ...f, notes: e.target.value }))}
+                        />
+                    </div>
                 </CardContent>
             </Card>
         </div>

@@ -31,9 +31,18 @@ function formatDob(iso) {
     }
 }
 
-function hasAllergies(customer) {
-    const raw = customer?.health?.allergy_list;
+function hasMedicationAllergies(customer) {
+    const raw = customer?.health?.medication_allergies;
     return typeof raw === 'string' && raw.trim().length > 0;
+}
+
+function hasOtherAllergiesOnly(customer) {
+    const h = customer?.health;
+    const med = h?.medication_allergies;
+    const other = h?.other_allergies;
+    const hasMed = typeof med === 'string' && med.trim().length > 0;
+    const hasOther = typeof other === 'string' && other.trim().length > 0;
+    return hasOther && !hasMed;
 }
 
 function CustomersTableSkeleton() {
@@ -167,12 +176,19 @@ export default function CustomerList() {
                                             </TableCell>
                                             <TableCell>{c.phone}</TableCell>
                                             <TableCell>
-                                                {hasAllergies(c) ? (
+                                                {hasMedicationAllergies(c) ? (
                                                     <Badge
                                                         variant="destructive"
                                                         className="font-semibold uppercase tracking-wide"
                                                     >
                                                         ALLERGIES
+                                                    </Badge>
+                                                ) : hasOtherAllergiesOnly(c) ? (
+                                                    <Badge
+                                                        variant="outline"
+                                                        className="border-amber-500/50 bg-amber-950/35 font-semibold uppercase tracking-wide text-amber-100"
+                                                    >
+                                                        OTHER
                                                     </Badge>
                                                 ) : (
                                                     <span className="text-muted-foreground">—</span>

@@ -189,13 +189,17 @@ class PrescriptionController extends Controller
     }
 
     /**
+     * Cross-check prescribed medicines against **medication_allergies** only.
+     * {@see CustomerHealth::$medication_allergies} — drug / drug-class entries used for supply safety.
+     * {@see CustomerHealth::$other_allergies} is never used here (reference-only on the customer record).
+     *
      * @param  array<int, array{medicine_id: int, quantity: int}>  $items
      * @param  Collection<int, Medicine>  $medicines
      * @return list<array{medicine_id: int, medicine_name: string, matched_allergen: string}>
      */
     private function detectAllergyConflicts(Customer $customer, array $items, $medicines): array
     {
-        $raw = $customer->customerHealth?->allergy_list;
+        $raw = $customer->customerHealth?->medication_allergies;
         if (! is_string($raw) || trim($raw) === '') {
             return [];
         }
