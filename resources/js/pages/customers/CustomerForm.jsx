@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import * as customersApi from '@/api/customers';
+import MedicationAllergyInput from '@/components/MedicationAllergyInput';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -260,15 +261,17 @@ export default function CustomerForm() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <div className="space-y-2">
-                        <Label htmlFor="medication_allergies">Medication allergies</Label>
-                        <Textarea
-                            id="medication_allergies"
-                            rows={3}
+                        <Label>Medication allergies</Label>
+                        <MedicationAllergyInput
+                            id="form_medication_allergies"
                             value={healthFields.medication_allergies}
-                            onChange={(e) => setHealthFields((f) => ({ ...f, medication_allergies: e.target.value }))}
-                            placeholder="e.g. Penicillin, NSAIDs, Codeine, Aspirin…"
+                            onChange={(v) => setHealthFields((f) => ({ ...f, medication_allergies: v }))}
+                            disabled={saving}
                         />
-                        <p className="text-xs text-muted-foreground">Used for automatic prescription safety checks.</p>
+                        <p className="text-xs text-muted-foreground">
+                            Used for automatic prescription safety checks. Pick stocked medicines or add other names
+                            manually.
+                        </p>
                     </div>
                     <div className="space-y-2">
                         <Label htmlFor="other_allergies">Other allergies</Label>
