@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { LogOut, Menu, Pill } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { pageTitleForPath } from '@/lib/routeAccess';
+import * as prescriptionsApi from '@/api/prescriptions';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -13,11 +14,18 @@ import {
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 
-/** @type {Array<{ to: string; label: string; roles: string[]; end?: boolean }>} */
+/** @type {Array<{ to: string; label: string; roles: string[]; end?: boolean; indent?: boolean; badgeKey?: 'pending_review' }>} */
 const NAV_ITEMS = [
     { to: '/dashboard', label: 'Dashboard', roles: ['pharmacist', 'manager', 'admin'] },
     { to: '/customers', label: 'Customers', roles: ['pharmacist', 'admin'], end: true },
     { to: '/prescriptions', label: 'Prescriptions', roles: ['pharmacist', 'admin'] },
+    {
+        to: '/prescriptions/pending-review',
+        label: 'Pending review',
+        roles: ['manager', 'admin'],
+        indent: true,
+        badgeKey: 'pending_review',
+    },
     { to: '/inventory', label: 'Inventory', roles: ['pharmacist', 'manager', 'admin'] },
     { to: '/reports', label: 'Reports', roles: ['manager', 'admin'] },
     { to: '/alerts', label: 'Alerts log', roles: ['admin'] },
@@ -33,22 +41,35 @@ function navClass({ isActive }) {
 }
 
 /**
- * @param {{ role?: string; onNavigate?: () => void }} props
+ * @param {{ role?: string; onNavigate?: () => void; pendingReviewCount?: number }} props
  */
-function SidebarNav({ role, onNavigate }) {
+function SidebarNav({ role, onNavigate, pendingReviewCount = 0 }) {
     const items = NAV_ITEMS.filter((item) => role && item.roles.includes(role));
 
     return (
         <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-2 py-2" aria-label="Main">
-            {items.map(({ to, label, end }) => (
+            {items.map(({ to, label, end, indent, badgeKey }) => (
                 <NavLink
                     key={to}
                     to={to}
                     end={end}
-                    className={navClass}
+                    className={({ isActive }) =>
+                        cn(navClass({ isActive }), indent ? 'ml-3 border-l border-slate-700/80 pl-3' : null)
+                    }
                     onClick={() => onNavigate?.()}
                 >
-                    {label}
+                    <span className="flex items-center justify-between gap-2">
+                        <span>{label}</span>
+                        {badgeKey === 'pending_review' && pendingReviewCount > 0 ? (
+                            <Badge
+                                variant="destructive"
+                                className="min-w-6 justify-center px-1.5 text-[10px] tabular-nums"
+                                aria-label={`${pendingReviewCount} prescriptions awaiting review`}
+                            >
+                                {pendingReviewCount > 99 ? '99+' : pendingReviewCount}
+                            </Badge>
+                        ) : null}
+                    </span>
                 </NavLink>
             ))}
         </nav>
@@ -100,9 +121,37 @@ export function AppLayout() {
     const user = useAuthStore((s) => s.user);
     const logout = useAuthStore((s) => s.logout);
     const [mobileOpen, setMobileOpen] = useState(false);
+    const [pendingReviewCount, setPendingReviewCount] = useState(0);
 
     const role = user?.role;
     const title = pageTitleForPath(location.pathname);
+
+    const loadPendingReviewCount = useCallback(async () => {
+        if (role !== 'manager' && role !== 'admin') {
+            setPendingReviewCount(0);
+            return;
+        }
+        try {
+            const { data } = await prescriptionsApi.listPrescriptions({ status: 'pending_review', page: 1 });
+            setPendingReviewCount(typeof data.total === 'number' ? data.total : 0);
+        } catch {
+            setPendingReviewCount(0);
+        }
+    }, [role]);
+
+    useEffect(() => {
+        void loadPendingReviewCount();
+    }, [loadPendingReviewCount]);
+
+    useEffect(() => {
+        if (role !== 'manager' && role !== 'admin') {
+            return undefined;
+        }
+        const id = window.setInterval(() => {
+            void loadPendingReviewCount();
+        }, 120_000);
+        return () => window.clearInterval(id);
+    }, [role, loadPendingReviewCount]);
 
     return (
         <div className="flex min-h-dvh bg-background">
@@ -121,7 +170,7 @@ export function AppLayout() {
                     </div>
                 </div>
                 <div className="flex min-h-0 flex-1 flex-col">
-                    <SidebarNav role={role} />
+                    <SidebarNav role={role} pendingReviewCount={pendingReviewCount} />
                     {role === 'admin' ? (
                         <>
                             <div className="mx-3 my-2 border-t border-slate-700/80" role="separator" />
@@ -145,7 +194,11 @@ export function AppLayout() {
                         </DialogTitle>
                     </DialogHeader>
                     <div className="flex min-h-0 flex-1 flex-col">
-                        <SidebarNav role={role} onNavigate={() => setMobileOpen(false)} />
+                        <SidebarNav
+                            role={role}
+                            onNavigate={() => setMobileOpen(false)}
+                            pendingReviewCount={pendingReviewCount}
+                        />
                         {role === 'admin' ? (
                             <>
                                 <div className="mx-3 my-2 border-t border-slate-700/80" role="separator" />

@@ -17,6 +17,7 @@ import CustomerView from '@/pages/customers/CustomerView';
 import PrescriptionList from '@/pages/prescriptions/PrescriptionList';
 import NewPrescription from '@/pages/prescriptions/NewPrescription';
 import PrescriptionDetail from '@/pages/prescriptions/PrescriptionDetail';
+import PendingReview from '@/pages/prescriptions/PendingReview';
 import InventoryList from '@/pages/inventory/InventoryList';
 import Reports from '@/pages/reports/Reports';
 import AlertsLog from '@/pages/alerts/AlertsLog';
@@ -74,6 +75,14 @@ function AppRoutes() {
                         <Route path="/customers/:id/edit" element={<CustomerForm />} />
                         <Route path="/customers/:id" element={<CustomerView />} />
                         <Route path="/prescriptions" element={<PrescriptionList />} />
+                        <Route
+                            path="/prescriptions/pending-review"
+                            element={
+                                <ProtectedRoute requiredRole={['manager', 'admin']}>
+                                    <PendingReview />
+                                </ProtectedRoute>
+                            }
+                        />
                         <Route path="/prescriptions/new" element={<NewPrescription />} />
                         <Route path="/prescriptions/:id" element={<PrescriptionDetail />} />
                         <Route path="/inventory" element={<InventoryList />} />
