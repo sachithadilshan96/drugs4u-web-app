@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\AlertController;
 use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\CustomerHealthController;
 use App\Http\Controllers\Api\InventoryController;
@@ -28,6 +29,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
     Route::get('inventory/low-stock', [InventoryController::class, 'lowStock']);
     Route::apiResource('inventory', InventoryController::class);
+    Route::post('alerts/{alert}/dismiss', [AlertController::class, 'dismiss']);
 
     Route::get('medicines', [MedicineController::class, 'index']);
 
