@@ -380,7 +380,7 @@ export default function NewPrescription() {
             const { data, status } = await prescriptionsApi.createPrescription({
                 customer_id: selectedCustomer.id,
                 notes: notes.trim() || undefined,
-                status: 'pending',
+                status: 'dispensed',
                 items: lineItems.map((r) => ({ medicine_id: r.medicine_id, quantity: r.quantity })),
                 acknowledged_allergy_overrides,
                 acknowledged_age_restricted_medicine_ids,
@@ -389,6 +389,8 @@ export default function NewPrescription() {
                 const st = data.data?.status;
                 if (st === 'pending_review') {
                     toast.success('Prescription submitted for manager review');
+                } else if (st === 'dispensed') {
+                    toast.success('Prescription dispensed');
                 } else {
                     toast.success('Prescription created');
                 }
@@ -669,7 +671,9 @@ export default function NewPrescription() {
                 <Card>
                     <CardHeader>
                         <CardTitle className="text-lg">Step 3 — Review & confirm</CardTitle>
-                        <CardDescription>Creates a pending prescription for pharmacy fulfilment.</CardDescription>
+                        <CardDescription>
+                            Dispenses immediately unless flagged for manager review.
+                        </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
                         {submitError ? (
