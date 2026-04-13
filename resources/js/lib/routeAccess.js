@@ -11,7 +11,8 @@ const PATH_PREFIX_ROLES = [
     { prefix: '/alerts', roles: ['admin'] },
     { prefix: '/reports', roles: ['manager', 'admin'] },
     { prefix: '/customers', roles: ['pharmacist', 'admin'] },
-    { prefix: '/prescriptions', roles: ['pharmacist', 'admin'] },
+    { prefix: '/prescriptions/pending-review', roles: ['manager', 'admin'] },
+    { prefix: '/prescriptions', roles: ['pharmacist', 'manager', 'admin'] },
     { prefix: '/inventory', roles: ['pharmacist', 'manager', 'admin'] },
     { prefix: '/dashboard', roles: ['pharmacist', 'manager', 'admin'] },
 ];
@@ -68,6 +69,7 @@ const TITLE_RULES = [
     { pattern: /^\/customers\/[^/]+\/edit\/?$/, title: 'Edit customer' },
     { pattern: /^\/customers\/[^/]+\/?$/, title: 'Customer' },
     { pattern: /^\/customers\/?$/, title: 'Customers' },
+    { pattern: /^\/prescriptions\/pending-review\/?$/, title: 'Pending review' },
     { pattern: /^\/prescriptions\/new\/?$/, title: 'New prescription' },
     { pattern: /^\/prescriptions\/\d+\/?$/, title: 'Prescription' },
     { pattern: /^\/prescriptions\/?$/, title: 'Prescriptions' },

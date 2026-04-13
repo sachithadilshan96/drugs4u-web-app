@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, ClipboardPlus } from 'lucide-react';
 import { toast } from 'sonner';
 import * as prescriptionsApi from '@/api/prescriptions';
+import { useAuthStore } from '@/store/authStore';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -30,9 +31,26 @@ function statusBadgeClass(status) {
             return 'border-teal-500/50 bg-teal-950/40 text-teal-100';
         case 'rejected':
             return 'border-red-500/50 bg-red-950/40 text-red-100';
+        case 'pending_review':
+            return 'border-orange-500/50 bg-orange-950/45 text-orange-100';
         default:
             return 'border-amber-500/50 bg-amber-950/40 text-amber-100';
     }
+}
+
+function statusLabel(status) {
+    if (status === 'pending_review') {
+        return 'Awaiting Review';
+    }
+    return status;
+}
+
+function truncateFlagReason(text, max = 40) {
+    if (text == null || text === '') {
+        return '—';
+    }
+    const s = String(text);
+    return s.length > max ? `${s.slice(0, max)}…` : s;
 }
 
 function formatWhen(iso) {
@@ -68,6 +86,7 @@ function TableSkeleton() {
 
 export default function PrescriptionList() {
     const navigate = useNavigate();
+    const role = useAuthStore((s) => s.user?.role);
     const [loading, setLoading] = useState(true);
     const [rows, setRows] = useState([]);
     const [meta, setMeta] = useState(null);
@@ -150,6 +169,7 @@ export default function PrescriptionList() {
                                 <SelectContent>
                                     <SelectItem value="all">All</SelectItem>
                                     <SelectItem value="pending">Pending</SelectItem>
+                                    <SelectItem value="pending_review">Awaiting Review</SelectItem>
                                     <SelectItem value="dispensed">Dispensed</SelectItem>
                                     <SelectItem value="rejected">Rejected</SelectItem>
                                 </SelectContent>
@@ -176,6 +196,7 @@ export default function PrescriptionList() {
                                     <TableHead>Customer</TableHead>
                                     <TableHead>Pharmacist</TableHead>
                                     <TableHead>Items</TableHead>
+                                    <TableHead>Flagged</TableHead>
                                     <TableHead>Status</TableHead>
                                     <TableHead className="w-[100px] text-right">Actions</TableHead>
                                 </TableRow>
@@ -183,50 +204,69 @@ export default function PrescriptionList() {
                             <TableBody>
                                 {rows.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                                        <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
                                             No prescriptions match your filters.
                                         </TableCell>
                                     </TableRow>
                                 ) : (
-                                    rows.map((r) => (
-                                        <TableRow
-                                            key={r.id}
-                                            className="cursor-pointer hover:bg-muted/50"
-                                            onClick={() => navigate(`/prescriptions/${r.id}`)}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter' || e.key === ' ') {
-                                                    e.preventDefault();
-                                                    navigate(`/prescriptions/${r.id}`);
-                                                }
-                                            }}
-                                            tabIndex={0}
-                                            role="link"
-                                        >
-                                            <TableCell className="text-muted-foreground">{formatWhen(r.created_at)}</TableCell>
-                                            <TableCell className="font-medium">{r.customer_name ?? '—'}</TableCell>
-                                            <TableCell>{r.pharmacist_name ?? '—'}</TableCell>
-                                            <TableCell>{r.items_count ?? 0}</TableCell>
-                                            <TableCell>
-                                                <Badge variant="outline" className={statusBadgeClass(r.status)}>
-                                                    {r.status}
-                                                </Badge>
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                <Button
-                                                    type="button"
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    className="text-teal-600 hover:text-teal-500"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
+                                    rows.map((r) => {
+                                        const fullReason = r.flagged_reason ?? '';
+                                        const reasonPreview = truncateFlagReason(fullReason, 40);
+                                        const pharmacistAwaiting =
+                                            role === 'pharmacist' && r.status === 'pending_review';
+
+                                        return (
+                                            <TableRow
+                                                key={r.id}
+                                                className="cursor-pointer hover:bg-muted/50"
+                                                onClick={() => navigate(`/prescriptions/${r.id}`)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter' || e.key === ' ') {
+                                                        e.preventDefault();
                                                         navigate(`/prescriptions/${r.id}`);
-                                                    }}
+                                                    }
+                                                }}
+                                                tabIndex={0}
+                                                role="link"
+                                            >
+                                                <TableCell className="text-muted-foreground">{formatWhen(r.created_at)}</TableCell>
+                                                <TableCell className="font-medium">{r.customer_name ?? '—'}</TableCell>
+                                                <TableCell>{r.pharmacist_name ?? '—'}</TableCell>
+                                                <TableCell>{r.items_count ?? 0}</TableCell>
+                                                <TableCell
+                                                    className="max-w-[14rem] truncate text-sm text-muted-foreground"
+                                                    title={fullReason || undefined}
                                                 >
-                                                    View
-                                                </Button>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))
+                                                    {reasonPreview}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Badge variant="outline" className={statusBadgeClass(r.status)}>
+                                                        {statusLabel(r.status)}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    {pharmacistAwaiting ? (
+                                                        <span className="text-xs text-muted-foreground">
+                                                            Awaiting manager approval
+                                                        </span>
+                                                    ) : (
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="text-teal-600 hover:text-teal-500"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                navigate(`/prescriptions/${r.id}`);
+                                                            }}
+                                                        >
+                                                            View
+                                                        </Button>
+                                                    )}
+                                                </TableCell>
+                                            </TableRow>
+                                        );
+                                    })
                                 )}
                             </TableBody>
                         </Table>

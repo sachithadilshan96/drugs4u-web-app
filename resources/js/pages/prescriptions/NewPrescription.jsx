@@ -112,6 +112,8 @@ export default function NewPrescription() {
     const [ageDialog, setAgeDialog] = useState({ open: false, medicineName: '', minAge: 18 });
     /** @type {React.MutableRefObject<{ medicine_id: number; medicine_name: string; quantity: number; requires_age_check: boolean; min_age: number } | null>} */
     const pendingLineRef = useRef(null);
+    /** Carries allergy token from dialog through age gate before pushLine. */
+    const pendingOptsRef = useRef({ allergyMatchedAllergen: /** @type {string | null} */ (null) });
 
     useEffect(() => {
         const t = setTimeout(() => setDebouncedCustomerQuery(customerQuery.trim()), 300);
@@ -237,7 +239,9 @@ export default function NewPrescription() {
             .filter(Boolean);
     }, [selectedCustomer]);
 
-    const pushLine = useCallback((line) => {
+    const pushLine = useCallback((line, meta = {}) => {
+        const allergyMatchedAllergen = meta.allergyMatchedAllergen ?? null;
+        const ageIdVerified = meta.ageIdVerified ?? false;
         setLineItems((prev) => [
             ...prev,
             {
@@ -246,14 +250,21 @@ export default function NewPrescription() {
                 quantity: line.quantity,
                 requires_age_check: line.requires_age_check,
                 min_age: line.min_age,
+                allergy_matched_allergen: allergyMatchedAllergen,
+                age_id_verified: ageIdVerified,
             },
         ]);
         pendingLineRef.current = null;
+        pendingOptsRef.current = { allergyMatchedAllergen: null };
         setMedicineQty('1');
     }, []);
 
     const tryQueueAddLine = useCallback(
-        (line, { skipAllergyCheck = false, skipAgeCheck = false } = {}) => {
+        (line, opts = {}) => {
+            const skipAllergyCheck = opts.skipAllergyCheck ?? false;
+            const skipAgeCheck = opts.skipAgeCheck ?? false;
+            const allergyMatchedAllergen = opts.allergyMatchedAllergen ?? null;
+            const ageIdVerified = opts.ageIdVerified ?? false;
             if (!selectedCustomer) {
                 return;
             }
@@ -268,10 +279,11 @@ export default function NewPrescription() {
             }
             if (!skipAgeCheck && isAgeRestrictedIssue(customerAge, line)) {
                 pendingLineRef.current = line;
+                pendingOptsRef.current = { allergyMatchedAllergen };
                 setAgeDialog({ open: true, medicineName: line.medicine_name, minAge: line.min_age ?? 18 });
                 return;
             }
-            pushLine(line);
+            pushLine(line, { allergyMatchedAllergen, ageIdVerified });
         },
         [customerAge, pushLine, selectedCustomer],
     );
@@ -303,17 +315,22 @@ export default function NewPrescription() {
     }, [medicineId, medicineOptions, medicineQty, tryQueueAddLine]);
 
     const onAllergyAcknowledge = useCallback(() => {
-        setAllergyDialog((d) => ({ ...d, open: false }));
         const line = pendingLineRef.current;
-        if (!line) {
-            return;
+        const allergen = allergyDialog.allergen;
+        setAllergyDialog((d) => ({ ...d, open: false }));
+        if (line && allergen) {
+            tryQueueAddLine(line, {
+                skipAllergyCheck: true,
+                skipAgeCheck: false,
+                allergyMatchedAllergen: allergen,
+            });
         }
-        tryQueueAddLine(line, { skipAllergyCheck: true, skipAgeCheck: false });
-    }, [tryQueueAddLine]);
+    }, [allergyDialog.allergen, tryQueueAddLine]);
 
     const onAllergyRemove = useCallback(() => {
         setAllergyDialog((d) => ({ ...d, open: false }));
         pendingLineRef.current = null;
+        pendingOptsRef.current = { allergyMatchedAllergen: null };
     }, []);
 
     const onAgeVerified = useCallback(() => {
@@ -322,12 +339,19 @@ export default function NewPrescription() {
         if (!line) {
             return;
         }
-        tryQueueAddLine(line, { skipAllergyCheck: true, skipAgeCheck: true });
+        const carry = pendingOptsRef.current?.allergyMatchedAllergen ?? null;
+        tryQueueAddLine(line, {
+            skipAllergyCheck: true,
+            skipAgeCheck: true,
+            allergyMatchedAllergen: carry,
+            ageIdVerified: true,
+        });
     }, [tryQueueAddLine]);
 
     const onAgeReject = useCallback(() => {
         setAgeDialog((d) => ({ ...d, open: false }));
         pendingLineRef.current = null;
+        pendingOptsRef.current = { allergyMatchedAllergen: null };
     }, []);
 
     const removeLine = useCallback((index) => {
@@ -343,14 +367,31 @@ export default function NewPrescription() {
         setSubmitError('');
         setSubmitting(true);
         try {
+            const acknowledged_allergy_overrides = lineItems
+                .filter((r) => r.allergy_matched_allergen)
+                .map((r) => ({
+                    medicine_id: r.medicine_id,
+                    matched_allergen: String(r.allergy_matched_allergen),
+                }));
+            const acknowledged_age_restricted_medicine_ids = lineItems
+                .filter((r) => r.age_id_verified && isAgeRestrictedIssue(customerAge, r))
+                .map((r) => r.medicine_id);
+
             const { data, status } = await prescriptionsApi.createPrescription({
                 customer_id: selectedCustomer.id,
                 notes: notes.trim() || undefined,
                 status: 'pending',
                 items: lineItems.map((r) => ({ medicine_id: r.medicine_id, quantity: r.quantity })),
+                acknowledged_allergy_overrides,
+                acknowledged_age_restricted_medicine_ids,
             });
             if (status >= 200 && status < 300) {
-                toast.success('Prescription created');
+                const st = data.data?.status;
+                if (st === 'pending_review') {
+                    toast.success('Prescription submitted for manager review');
+                } else {
+                    toast.success('Prescription created');
+                }
                 const id = data.data?.id;
                 if (id) {
                     navigate(`/prescriptions/${id}`, { replace: true });
@@ -373,7 +414,7 @@ export default function NewPrescription() {
         } finally {
             setSubmitting(false);
         }
-    }, [lineItems, navigate, notes, selectedCustomer]);
+    }, [customerAge, lineItems, navigate, notes, selectedCustomer]);
 
     return (
         <div className="mx-auto max-w-3xl space-y-6">
