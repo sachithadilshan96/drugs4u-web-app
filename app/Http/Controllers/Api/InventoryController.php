@@ -100,7 +100,12 @@ class InventoryController extends Controller
             ->orderBy('quantity')
             ->orderBy('expiry_date')
             ->get()
-            ->map(fn (Inventory $inv) => $this->serializeInventoryRow($inv, $today));
+            ->map(function (Inventory $inv) use ($today) {
+                $payload = $this->serializeInventoryRow($inv, $today);
+                $payload['alert_id'] = $this->openLowStockAlertIdForMedicine($inv);
+
+                return $payload;
+            });
 
         return response()->json(['data' => $rows]);
     }
@@ -129,6 +134,40 @@ class InventoryController extends Controller
             'message' => 'Quantity below threshold ('.(int) $inventory->quantity.' units) for '.($inventory->medicine?->name ?? 'medicine #'.$inventory->medicine_id),
             'dismissed' => false,
         ]);
+    }
+
+    private function openLowStockAlertIdForMedicine(Inventory $inventory): ?int
+    {
+        $inventory->loadMissing('medicine');
+
+        $existing = AlertLog::query()
+            ->where('alert_type', 'low_stock')
+            ->where('reference_id', $inventory->medicine_id)
+            ->where('dismissed', false)
+            ->latest('id')
+            ->first();
+
+        if ($existing) {
+            return (int) $existing->id;
+        }
+
+        $hasAnyPriorAlert = AlertLog::query()
+            ->where('alert_type', 'low_stock')
+            ->where('reference_id', $inventory->medicine_id)
+            ->exists();
+
+        if ($hasAnyPriorAlert) {
+            return null;
+        }
+
+        $created = AlertLog::query()->create([
+            'alert_type' => 'low_stock',
+            'reference_id' => $inventory->medicine_id,
+            'message' => 'Quantity below threshold ('.(int) $inventory->quantity.' units) for '.($inventory->medicine?->name ?? 'medicine #'.$inventory->medicine_id),
+            'dismissed' => false,
+        ]);
+
+        return (int) $created->id;
     }
 
     /**
