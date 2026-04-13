@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Eye, Pencil, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 import * as customersApi from '@/api/customers';
@@ -53,6 +53,7 @@ function CustomersTableSkeleton() {
 }
 
 export default function CustomerList() {
+    const navigate = useNavigate();
     const [searchInput, setSearchInput] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
     const [page, setPage] = useState(1);
@@ -145,7 +146,20 @@ export default function CustomerList() {
                                     </TableRow>
                                 ) : (
                                     rows.map((c) => (
-                                        <TableRow key={c.id}>
+                                        <TableRow
+                                            key={c.id}
+                                            className="cursor-pointer hover:bg-muted/50"
+                                            onClick={() => navigate(`/customers/${c.id}`)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' || e.key === ' ') {
+                                                    e.preventDefault();
+                                                    navigate(`/customers/${c.id}`);
+                                                }
+                                            }}
+                                            tabIndex={0}
+                                            role="link"
+                                            aria-label={`View customer ${c.full_name}`}
+                                        >
                                             <TableCell className="font-medium">{c.full_name}</TableCell>
                                             <TableCell className="text-muted-foreground">
                                                 {formatDob(c.dob)}
@@ -165,7 +179,7 @@ export default function CustomerList() {
                                                 )}
                                             </TableCell>
                                             <TableCell className="text-right">
-                                                <div className="flex justify-end gap-2">
+                                                <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
                                                     <Button variant="outline" size="sm" className="gap-1" asChild>
                                                         <Link to={`/customers/${c.id}`}>
                                                             <Eye className="size-3.5" aria-hidden />
