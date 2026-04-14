@@ -22,7 +22,6 @@ export default defineConfig({
         // Align with http://127.0.0.1:8000 (php artisan serve). Using only [::1] in public/hot breaks script loads from 127.0.0.1.
         host: '127.0.0.1',
         port: 5173,
-        strictPort: true,
         hmr: {
             host: '127.0.0.1',
         },
