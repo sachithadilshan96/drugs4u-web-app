@@ -1,11 +1,27 @@
+import { existsSync, unlinkSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import laravel from 'laravel-vite-plugin';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
+/** Laravel reads `public/hot` and switches to the dev server; a stale file breaks the app when Vite is not running. */
+function removeStaleHotFile() {
+    return {
+        name: 'remove-stale-laravel-hot-file',
+        apply: 'build',
+        buildStart() {
+            const hotFile = fileURLToPath(new URL('./public/hot', import.meta.url));
+            if (existsSync(hotFile)) {
+                unlinkSync(hotFile);
+            }
+        },
+    };
+}
+
 export default defineConfig({
     plugins: [
+        removeStaleHotFile(),
         laravel({
             input: ['resources/css/app.css', 'resources/js/app.jsx'],
             refresh: true,

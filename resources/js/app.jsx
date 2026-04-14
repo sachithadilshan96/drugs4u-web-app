@@ -1,6 +1,6 @@
 import '../css/app.css';
 import './bootstrap';
-import { StrictMode, useEffect } from 'react';
+import { Component, StrictMode, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { ThemeProvider } from 'next-themes';
@@ -20,6 +20,32 @@ import InventoryList from '@/pages/inventory/InventoryList';
 import Reports from '@/pages/reports/Reports';
 import AlertsLog from '@/pages/alerts/AlertsLog';
 import UserManagement from '@/pages/admin/UserManagement';
+
+class RootErrorBoundary extends Component {
+    state = { error: null };
+
+    static getDerivedStateFromError(error) {
+        return { error };
+    }
+
+    render() {
+        if (this.state.error) {
+            const err = this.state.error;
+            const message = err instanceof Error ? err.message : String(err);
+            const stack = err instanceof Error ? err.stack : '';
+            return (
+                <div className="min-h-dvh bg-background p-6 text-foreground">
+                    <h1 className="font-heading text-lg font-semibold text-destructive">Application error</h1>
+                    <p className="mt-2 text-sm text-muted-foreground">{message}</p>
+                    {stack ? (
+                        <pre className="mt-4 max-h-[50vh] overflow-auto rounded-md border border-border bg-muted p-3 text-xs">{stack}</pre>
+                    ) : null}
+                </div>
+            );
+        }
+        return this.props.children;
+    }
+}
 
 function AuthBootstrap() {
     const loadUser = useAuthStore((s) => s.loadUser);
@@ -51,7 +77,7 @@ function AppRoutes() {
                         <Route path="/inventory" element={<InventoryList />} />
                         <Route path="/reports" element={<Reports />} />
                         <Route path="/alerts" element={<AlertsLog />} />
-                        <Route path="/admin/users" handle={{ requiredRole: 'admin' }} element={<UserManagement />} />
+                        <Route path="/admin/users" element={<UserManagement />} />
                         <Route path="*" element={<Navigate to="/dashboard" replace />} />
                     </Route>
                 </Route>
@@ -77,7 +103,9 @@ if (el) {
     createRoot(el).render(
         <StrictMode>
             <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-                <App />
+                <RootErrorBoundary>
+                    <App />
+                </RootErrorBoundary>
             </ThemeProvider>
         </StrictMode>,
     );

@@ -45,6 +45,22 @@ export function canAccessPath(pathname, role) {
     return allowed.includes(/** @type {StaffRole} */ (role));
 }
 
+/**
+ * Single role required for "soft" denial (toast + redirect to dashboard).
+ * Must not use `useMatches()` with `BrowserRouter` — RR v7 only exposes matches in a data router.
+ *
+ * @param {string} pathname
+ * @returns {StaffRole | undefined}
+ */
+export function requiredRoleForSoftRedirect(pathname) {
+    const raw = pathname.split('?')[0] ?? '/';
+    const path = raw.endsWith('/') && raw.length > 1 ? raw.slice(0, -1) : raw;
+    if (path === '/admin/users' || path.startsWith('/admin/users/')) {
+        return 'admin';
+    }
+    return undefined;
+}
+
 /** @type {Array<{ pattern: RegExp; title: string }>} */
 const TITLE_RULES = [
     { pattern: /^\/dashboard\/?$/, title: 'Dashboard' },

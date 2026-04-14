@@ -11,6 +11,8 @@ function readXsrfToken() {
 const api = axios.create({
     baseURL: '/api',
     withCredentials: true,
+    /** Avoid an infinite “session check” spinner when the API never responds. */
+    timeout: 20_000,
     headers: {
         'X-Requested-With': 'XMLHttpRequest',
         Accept: 'application/json',
