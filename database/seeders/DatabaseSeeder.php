@@ -23,6 +23,7 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         DB::transaction(function (): void {
+            DB::table('age_verification_log')->delete();
             PrescriptionItem::query()->delete();
             MedicationHistory::query()->delete();
             Prescription::query()->delete();
@@ -55,23 +56,32 @@ class DatabaseSeeder extends Seeder
                 'role' => 'manager',
             ]);
 
-            $medicines = collect([
-                ['name' => 'Codeine', 'description' => 'Opioid analgesic', 'requires_age_check' => true, 'min_age' => 18],
-                ['name' => 'Methadone', 'description' => 'Opioid substitution', 'requires_age_check' => true, 'min_age' => 18],
-                ['name' => 'Paracetamol', 'description' => 'Analgesic / antipyretic', 'requires_age_check' => false, 'min_age' => 18],
-                ['name' => 'Ibuprofen', 'description' => 'NSAID', 'requires_age_check' => false, 'min_age' => 18],
-                ['name' => 'Amoxicillin', 'description' => 'Penicillin antibiotic', 'requires_age_check' => false, 'min_age' => 18],
-                ['name' => 'Diazepam', 'description' => 'Benzodiazepine', 'requires_age_check' => true, 'min_age' => 18],
-                ['name' => 'Loratadine', 'description' => 'Antihistamine', 'requires_age_check' => false, 'min_age' => 18],
-                ['name' => 'Cetirizine', 'description' => 'Antihistamine', 'requires_age_check' => false, 'min_age' => 18],
-                ['name' => 'Omeprazole', 'description' => 'PPI', 'requires_age_check' => false, 'min_age' => 18],
-                ['name' => 'Simvastatin', 'description' => 'Statin', 'requires_age_check' => false, 'min_age' => 18],
-                ['name' => 'Amlodipine', 'description' => 'Calcium channel blocker', 'requires_age_check' => false, 'min_age' => 18],
-                ['name' => 'Gabapentin', 'description' => 'Neuropathic pain', 'requires_age_check' => false, 'min_age' => 18],
-                ['name' => 'Tramadol', 'description' => 'Opioid analgesic', 'requires_age_check' => true, 'min_age' => 18],
-                ['name' => 'Naproxen', 'description' => 'NSAID', 'requires_age_check' => false, 'min_age' => 18],
-                ['name' => 'Furosemide', 'description' => 'Loop diuretic', 'requires_age_check' => false, 'min_age' => 18],
-            ])->map(fn (array $row) => Medicine::query()->create($row));
+            $medicineSpecs = [
+                ['name' => 'Codeine', 'description' => 'Opioid analgesic', 'requires_age_check' => true, 'min_age' => 18, 'age_restriction_label' => 'Must be 18+ — Controlled Analgesic', 'age_restriction_notes' => 'Request photo ID. Accept passport, driving licence, or proof of age card.'],
+                ['name' => 'Methadone', 'description' => 'Opioid substitution', 'requires_age_check' => true, 'min_age' => 18, 'age_restriction_label' => 'Must be 18+ — Controlled Substance', 'age_restriction_notes' => 'Request photo ID. Two forms of ID recommended for methadone.'],
+                ['name' => 'Paracetamol', 'description' => 'Analgesic / antipyretic', 'requires_age_check' => false, 'min_age' => null, 'age_restriction_label' => null, 'age_restriction_notes' => null],
+                ['name' => 'Ibuprofen', 'description' => 'NSAID', 'requires_age_check' => false, 'min_age' => null, 'age_restriction_label' => null, 'age_restriction_notes' => null],
+                ['name' => 'Amoxicillin', 'description' => 'Penicillin antibiotic', 'requires_age_check' => false, 'min_age' => null, 'age_restriction_label' => null, 'age_restriction_notes' => null],
+                ['name' => 'Diazepam', 'description' => 'Benzodiazepine', 'requires_age_check' => true, 'min_age' => 18, 'age_restriction_label' => 'Must be 18+ — Controlled Benzodiazepine', 'age_restriction_notes' => 'Request photo ID. Check NHS record if patient claims exemption.'],
+                ['name' => 'Loratadine', 'description' => 'Antihistamine', 'requires_age_check' => false, 'min_age' => null, 'age_restriction_label' => null, 'age_restriction_notes' => null],
+                ['name' => 'Cetirizine', 'description' => 'Antihistamine', 'requires_age_check' => false, 'min_age' => null, 'age_restriction_label' => null, 'age_restriction_notes' => null],
+                ['name' => 'Omeprazole', 'description' => 'PPI', 'requires_age_check' => false, 'min_age' => null, 'age_restriction_label' => null, 'age_restriction_notes' => null],
+                ['name' => 'Simvastatin', 'description' => 'Statin', 'requires_age_check' => false, 'min_age' => null, 'age_restriction_label' => null, 'age_restriction_notes' => null],
+                ['name' => 'Amlodipine', 'description' => 'Calcium channel blocker', 'requires_age_check' => false, 'min_age' => null, 'age_restriction_label' => null, 'age_restriction_notes' => null],
+                ['name' => 'Gabapentin', 'description' => 'Neuropathic pain', 'requires_age_check' => false, 'min_age' => null, 'age_restriction_label' => null, 'age_restriction_notes' => null],
+                ['name' => 'Tramadol', 'description' => 'Opioid analgesic', 'requires_age_check' => true, 'min_age' => 18, 'age_restriction_label' => 'Must be 18+ — Controlled Analgesic', 'age_restriction_notes' => 'Request photo ID. Accept passport, driving licence, or proof of age card.'],
+                ['name' => 'Naproxen', 'description' => 'NSAID', 'requires_age_check' => false, 'min_age' => null, 'age_restriction_label' => null, 'age_restriction_notes' => null],
+                ['name' => 'Furosemide', 'description' => 'Loop diuretic', 'requires_age_check' => false, 'min_age' => null, 'age_restriction_label' => null, 'age_restriction_notes' => null],
+            ];
+
+            $medicines = collect($medicineSpecs)->map(fn (array $row) => Medicine::query()->create([
+                'name' => $row['name'],
+                'description' => $row['description'],
+                'requires_age_check' => $row['requires_age_check'],
+                'min_age' => $row['min_age'],
+                'age_restriction_label' => $row['age_restriction_label'],
+                'age_restriction_notes' => $row['age_restriction_notes'],
+            ]));
 
             $byName = $medicines->keyBy('name');
 

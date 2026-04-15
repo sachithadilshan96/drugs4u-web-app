@@ -19,6 +19,8 @@ import NewPrescription from '@/pages/prescriptions/NewPrescription';
 import PrescriptionDetail from '@/pages/prescriptions/PrescriptionDetail';
 import PendingReview from '@/pages/prescriptions/PendingReview';
 import InventoryList from '@/pages/inventory/InventoryList';
+import MedicineList from '@/pages/inventory/MedicineList';
+import MedicineForm from '@/pages/inventory/MedicineForm';
 import Reports from '@/pages/reports/Reports';
 import AlertsLog from '@/pages/alerts/AlertsLog';
 import UserManagement from '@/pages/admin/UserManagement';
@@ -85,6 +87,9 @@ function AppRoutes() {
                         />
                         <Route path="/prescriptions/new" element={<NewPrescription />} />
                         <Route path="/prescriptions/:id" element={<PrescriptionDetail />} />
+                        <Route path="/medicines/new" element={<ProtectedRoute requiredRole="admin"><MedicineForm /></ProtectedRoute>} />
+                        <Route path="/medicines/:id/edit" element={<ProtectedRoute requiredRole="admin"><MedicineForm /></ProtectedRoute>} />
+                        <Route path="/medicines" element={<MedicineList />} />
                         <Route path="/inventory" element={<InventoryList />} />
                         <Route path="/reports" element={<Reports />} />
                         <Route path="/alerts" element={<AlertsLog />} />

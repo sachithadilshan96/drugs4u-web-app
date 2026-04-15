@@ -18,7 +18,6 @@ export function getPrescription(id) {
  *   status?: string;
  *   items: Array<{ medicine_id: number; quantity: number }>;
  *   acknowledged_allergy_overrides?: Array<{ medicine_id: number; matched_allergen: string }>;
- *   acknowledged_age_restricted_medicine_ids?: number[];
  * }} data
  */
 export function createPrescription(data) {

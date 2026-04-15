@@ -12,6 +12,12 @@ class Medicine extends Model
         'description',
         'requires_age_check',
         'min_age',
+        'age_restriction_label',
+        'age_restriction_notes',
+    ];
+
+    protected $appends = [
+        'is_age_restricted',
     ];
 
     /**
@@ -23,6 +29,20 @@ class Medicine extends Model
             'requires_age_check' => 'boolean',
             'min_age' => 'integer',
         ];
+    }
+
+    public function getIsAgeRestrictedAttribute(): bool
+    {
+        return $this->requires_age_check === true;
+    }
+
+    /**
+     * @param  \Illuminate\Database\Eloquent\Builder<Medicine>  $query
+     * @return \Illuminate\Database\Eloquent\Builder<Medicine>
+     */
+    public function scopeAgeRestricted($query)
+    {
+        return $query->where('requires_age_check', true);
     }
 
     /**

@@ -1,12 +1,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ChevronRight, Loader2, Plus, Trash2 } from 'lucide-react';
+import { ChevronRight, Loader2, Plus, Trash2, TriangleAlert } from 'lucide-react';
+import { differenceInYears, format, parseISO } from 'date-fns';
 import { toast } from 'sonner';
 import * as customersApi from '@/api/customers';
 import * as inventoryApi from '@/api/inventory';
+import * as medicinesApi from '@/api/medicines';
 import * as prescriptionsApi from '@/api/prescriptions';
 import { customerAgeFromDob, findAllergenConflict, isAgeRestrictedIssue } from '@/lib/prescriptionSafety';
+import { useAuthStore } from '@/store/authStore';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -21,35 +35,74 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 
+/** @param {string | null | undefined} dobIso */
+function calculateAge(dobIso) {
+    if (!dobIso || typeof dobIso !== 'string') {
+        return null;
+    }
+    try {
+        return differenceInYears(new Date(), parseISO(dobIso));
+    } catch {
+        return null;
+    }
+}
+
+/** @param {string | null | undefined} dobIso */
+function formatDobDisplay(dobIso) {
+    if (!dobIso || typeof dobIso !== 'string') {
+        return '—';
+    }
+    try {
+        return format(parseISO(dobIso), 'd MMMM yyyy');
+    } catch {
+        return dobIso;
+    }
+}
+
 /**
  * @param {Array<Record<string, unknown>>} rows
  */
 function aggregateMedicineStock(rows) {
-    /** @type {Map<number, { medicine_id: number; medicine_name: string; stock: number; requires_age_check: boolean; min_age: number }>} */
+    /** @type {Map<number, { medicine_id: number; medicine_name: string; stock: number; requires_age_check: boolean; min_age: number | null }>} */
     const map = new Map();
     for (const r of rows) {
         const id = Number(r.medicine_id);
         if (!id) {
             continue;
         }
+        const rowMin = typeof r.min_age === 'number' ? r.min_age : r.min_age != null ? Number(r.min_age) : null;
         if (!map.has(id)) {
             map.set(id, {
                 medicine_id: id,
                 medicine_name: String(r.medicine_name ?? ''),
                 stock: 0,
                 requires_age_check: Boolean(r.requires_age_check),
-                min_age: typeof r.min_age === 'number' ? r.min_age : 18,
+                min_age: Number.isFinite(rowMin) ? rowMin : null,
             });
         }
         const x = map.get(id);
         x.stock += Number(r.quantity) || 0;
         x.requires_age_check = x.requires_age_check || Boolean(r.requires_age_check);
-        x.min_age = Math.max(x.min_age, typeof r.min_age === 'number' ? r.min_age : 18);
+        if (Number.isFinite(rowMin)) {
+            x.min_age =
+                x.min_age == null ? rowMin : Math.max(x.min_age, rowMin);
+        }
     }
     return [...map.values()]
         .filter((m) => m.stock > 0)
         .sort((a, b) => a.medicine_name.localeCompare(b.medicine_name, 'en-GB'));
 }
+
+const ID_TYPE_OPTIONS = [
+    { value: '', label: 'Select ID type…' },
+    { value: 'Passport', label: 'Passport' },
+    { value: 'Driving Licence', label: 'Driving Licence' },
+    { value: 'Proof of Age Card (PASS scheme)', label: 'Proof of Age Card (PASS scheme)' },
+    { value: 'National Identity Card', label: 'National Identity Card' },
+    { value: 'HM Forces ID Card', label: 'HM Forces ID Card' },
+    { value: 'Customer claims exemption', label: 'Customer claims exemption' },
+    { value: 'No ID presented', label: 'No ID presented' },
+];
 
 function StepIndicator({ step }) {
     const labels = ['Customer', 'Medicines', 'Review'];
@@ -83,6 +136,7 @@ function StepIndicator({ step }) {
 
 export default function NewPrescription() {
     const navigate = useNavigate();
+    const user = useAuthStore((s) => s.user);
     const [searchParams] = useSearchParams();
     const preCustomerId = searchParams.get('customer');
 
@@ -109,11 +163,19 @@ export default function NewPrescription() {
     const [submitError, setSubmitError] = useState('');
 
     const [allergyDialog, setAllergyDialog] = useState({ open: false, allergen: '', medicineName: '' });
-    const [ageDialog, setAgeDialog] = useState({ open: false, medicineName: '', minAge: 18 });
-    /** @type {React.MutableRefObject<{ medicine_id: number; medicine_name: string; quantity: number; requires_age_check: boolean; min_age: number } | null>} */
+    /** @type {React.MutableRefObject<{ medicine_id: number; medicine_name: string; quantity: number; requires_age_check: boolean; min_age: number | null } | null>} */
     const pendingLineRef = useRef(null);
-    /** Carries allergy token from dialog through age gate before pushLine. */
-    const pendingOptsRef = useRef({ allergyMatchedAllergen: /** @type {string | null} */ (null) });
+
+    /** @type {Array<{ line: { medicine_id: number; medicine_name: string; quantity: number; requires_age_check: boolean; min_age: number | null }; allergyMatchedAllergen: string | null; medicine: Record<string, unknown>; customerAge: number }>} */
+    const [ageCheckQueue, setAgeCheckQueue] = useState([]);
+    const currentAgeCheck = ageCheckQueue[0] ?? null;
+
+    const [ageModalIdType, setAgeModalIdType] = useState('');
+    const [ageModalNotes, setAgeModalNotes] = useState('');
+    const [ageModalBusy, setAgeModalBusy] = useState(false);
+    const [exemptConfirmOpen, setExemptConfirmOpen] = useState(false);
+
+    const [completedVerificationIds, setCompletedVerificationIds] = useState([]);
 
     useEffect(() => {
         const t = setTimeout(() => setDebouncedCustomerQuery(customerQuery.trim()), 300);
@@ -207,6 +269,12 @@ export default function NewPrescription() {
         setStep(1);
     }, [preCustomerId, loadCustomer]);
 
+    useEffect(() => {
+        setCompletedVerificationIds([]);
+        setAgeCheckQueue([]);
+        setLineItems([]);
+    }, [selectedCustomer?.id]);
+
     /** Raw medication-allergy text only — used for Step 2 conflict checks (server uses the same field). */
     const medicationAllergyRaw = useMemo(
         () =>
@@ -241,7 +309,7 @@ export default function NewPrescription() {
 
     const pushLine = useCallback((line, meta = {}) => {
         const allergyMatchedAllergen = meta.allergyMatchedAllergen ?? null;
-        const ageIdVerified = meta.ageIdVerified ?? false;
+        const ageCheck = meta.age_check ?? null;
         setLineItems((prev) => [
             ...prev,
             {
@@ -250,21 +318,75 @@ export default function NewPrescription() {
                 quantity: line.quantity,
                 requires_age_check: line.requires_age_check,
                 min_age: line.min_age,
+                age_restriction_label: line.age_restriction_label ?? null,
                 allergy_matched_allergen: allergyMatchedAllergen,
-                age_id_verified: ageIdVerified,
+                age_check: ageCheck,
             },
         ]);
         pendingLineRef.current = null;
-        pendingOptsRef.current = { allergyMatchedAllergen: null };
         setMedicineQty('1');
     }, []);
 
-    const tryQueueAddLine = useCallback(
+    const continueAfterAllergy = useCallback(
+        async (line, { allergyMatchedAllergen = null } = {}) => {
+            if (!selectedCustomer) {
+                return;
+            }
+            if (!line.requires_age_check) {
+                pushLine(line, { allergyMatchedAllergen });
+                return;
+            }
+            let m;
+            try {
+                const { data } = await medicinesApi.getMedicine(line.medicine_id);
+                m = data.data ?? data;
+            } catch {
+                toast.error('Could not load medicine details.');
+                return;
+            }
+            const minAge =
+                m.min_age != null && m.min_age !== ''
+                    ? Number(m.min_age)
+                    : null;
+            const effectiveMin = Number.isFinite(minAge) ? minAge : 18;
+            const age = calculateAge(selectedCustomer.dob);
+            if (age === null) {
+                toast.error('Customer date of birth is required for age-restricted medicines.');
+                return;
+            }
+            if (age >= effectiveMin) {
+                pushLine(
+                    {
+                        ...line,
+                        min_age: effectiveMin,
+                        requires_age_check: Boolean(m.requires_age_check),
+                        age_restriction_label: m.age_restriction_label ?? null,
+                    },
+                    { allergyMatchedAllergen },
+                );
+                return;
+            }
+            setAgeCheckQueue((q) => [
+                ...q,
+                {
+                    line: {
+                        ...line,
+                        min_age: effectiveMin,
+                        requires_age_check: true,
+                    },
+                    allergyMatchedAllergen,
+                    medicine: m,
+                    customerAge: age,
+                },
+            ]);
+        },
+        [pushLine, selectedCustomer],
+    );
+
+    const tryStartAddLine = useCallback(
         (line, opts = {}) => {
             const skipAllergyCheck = opts.skipAllergyCheck ?? false;
-            const skipAgeCheck = opts.skipAgeCheck ?? false;
             const allergyMatchedAllergen = opts.allergyMatchedAllergen ?? null;
-            const ageIdVerified = opts.ageIdVerified ?? false;
             if (!selectedCustomer) {
                 return;
             }
@@ -277,15 +399,9 @@ export default function NewPrescription() {
                     return;
                 }
             }
-            if (!skipAgeCheck && isAgeRestrictedIssue(customerAge, line)) {
-                pendingLineRef.current = line;
-                pendingOptsRef.current = { allergyMatchedAllergen };
-                setAgeDialog({ open: true, medicineName: line.medicine_name, minAge: line.min_age ?? 18 });
-                return;
-            }
-            pushLine(line, { allergyMatchedAllergen, ageIdVerified });
+            void continueAfterAllergy(line, { allergyMatchedAllergen });
         },
-        [customerAge, pushLine, selectedCustomer],
+        [continueAfterAllergy, selectedCustomer],
     );
 
     const onAddItemClick = useCallback(() => {
@@ -311,48 +427,163 @@ export default function NewPrescription() {
             requires_age_check: opt.requires_age_check,
             min_age: opt.min_age,
         };
-        tryQueueAddLine(line, {});
-    }, [medicineId, medicineOptions, medicineQty, tryQueueAddLine]);
+        tryStartAddLine(line, {});
+    }, [medicineId, medicineOptions, medicineQty, tryStartAddLine]);
 
     const onAllergyAcknowledge = useCallback(() => {
         const line = pendingLineRef.current;
         const allergen = allergyDialog.allergen;
         setAllergyDialog((d) => ({ ...d, open: false }));
         if (line && allergen) {
-            tryQueueAddLine(line, {
-                skipAllergyCheck: true,
-                skipAgeCheck: false,
-                allergyMatchedAllergen: allergen,
-            });
+            void continueAfterAllergy(line, { allergyMatchedAllergen: allergen });
         }
-    }, [allergyDialog.allergen, tryQueueAddLine]);
+    }, [allergyDialog.allergen, continueAfterAllergy]);
 
     const onAllergyRemove = useCallback(() => {
         setAllergyDialog((d) => ({ ...d, open: false }));
         pendingLineRef.current = null;
-        pendingOptsRef.current = { allergyMatchedAllergen: null };
     }, []);
 
-    const onAgeVerified = useCallback(() => {
-        setAgeDialog((d) => ({ ...d, open: false }));
-        const line = pendingLineRef.current;
-        if (!line) {
+    useEffect(() => {
+        setAgeModalIdType('');
+        setAgeModalNotes('');
+    }, [currentAgeCheck?.line?.medicine_id]);
+
+    const appendVerificationId = useCallback((raw) => {
+        const id = raw?.data?.id ?? raw?.id;
+        if (id != null && Number.isFinite(Number(id))) {
+            setCompletedVerificationIds((prev) => [...prev, Number(id)]);
+        }
+    }, []);
+
+    const onAgeVerified = useCallback(async () => {
+        if (!currentAgeCheck || !selectedCustomer || !user?.id) {
             return;
         }
-        const carry = pendingOptsRef.current?.allergyMatchedAllergen ?? null;
-        tryQueueAddLine(line, {
-            skipAllergyCheck: true,
-            skipAgeCheck: true,
-            allergyMatchedAllergen: carry,
-            ageIdVerified: true,
-        });
-    }, [tryQueueAddLine]);
+        if (!ageModalIdType) {
+            toast.error('Select the ID type presented.');
+            return;
+        }
+        const { line, allergyMatchedAllergen, medicine, customerAge: custAge } = currentAgeCheck;
+        const minReq = line.min_age ?? 18;
+        setAgeModalBusy(true);
+        try {
+            const { data } = await medicinesApi.logAgeVerification({
+                medicine_id: line.medicine_id,
+                customer_id: selectedCustomer.id,
+                pharmacist_id: user.id,
+                customer_age: custAge,
+                min_age_required: minReq,
+                id_type_presented: ageModalIdType,
+                outcome: 'verified',
+                pharmacist_notes: ageModalNotes.trim() || undefined,
+            });
+            appendVerificationId(data);
+            pushLine(
+                {
+                    ...line,
+                    age_restriction_label: medicine.age_restriction_label ?? null,
+                },
+                {
+                    allergyMatchedAllergen,
+                    age_check: { outcome: 'verified', id_type: ageModalIdType },
+                },
+            );
+            setAgeCheckQueue((q) => q.slice(1));
+            toast.success(`${line.medicine_name} added — ID verified`);
+        } catch (e) {
+            toast.error(e.response?.data?.message ?? 'Could not record verification.');
+        } finally {
+            setAgeModalBusy(false);
+        }
+    }, [
+        ageModalIdType,
+        ageModalNotes,
+        appendVerificationId,
+        currentAgeCheck,
+        pushLine,
+        selectedCustomer,
+        user?.id,
+    ]);
 
-    const onAgeReject = useCallback(() => {
-        setAgeDialog((d) => ({ ...d, open: false }));
-        pendingLineRef.current = null;
-        pendingOptsRef.current = { allergyMatchedAllergen: null };
-    }, []);
+    const onAgeExemptConfirmed = useCallback(async () => {
+        setExemptConfirmOpen(false);
+        if (!currentAgeCheck || !selectedCustomer || !user?.id) {
+            return;
+        }
+        if (!ageModalIdType) {
+            toast.error('Select the ID type presented.');
+            return;
+        }
+        const { line, allergyMatchedAllergen, medicine, customerAge: custAge } = currentAgeCheck;
+        const minReq = line.min_age ?? 18;
+        setAgeModalBusy(true);
+        try {
+            const { data } = await medicinesApi.logAgeVerification({
+                medicine_id: line.medicine_id,
+                customer_id: selectedCustomer.id,
+                pharmacist_id: user.id,
+                customer_age: custAge,
+                min_age_required: minReq,
+                id_type_presented: ageModalIdType,
+                outcome: 'exempted',
+                pharmacist_notes: ageModalNotes.trim() || undefined,
+            });
+            appendVerificationId(data);
+            pushLine(
+                {
+                    ...line,
+                    age_restriction_label: medicine.age_restriction_label ?? null,
+                },
+                {
+                    allergyMatchedAllergen,
+                    age_check: { outcome: 'exempted', id_type: ageModalIdType },
+                },
+            );
+            setAgeCheckQueue((q) => q.slice(1));
+            toast.success(`${line.medicine_name} added — exemption recorded`);
+        } catch (e) {
+            toast.error(e.response?.data?.message ?? 'Could not record exemption.');
+        } finally {
+            setAgeModalBusy(false);
+        }
+    }, [
+        ageModalIdType,
+        ageModalNotes,
+        appendVerificationId,
+        currentAgeCheck,
+        pushLine,
+        selectedCustomer,
+        user?.id,
+    ]);
+
+    const onAgeReject = useCallback(async () => {
+        if (!currentAgeCheck || !selectedCustomer || !user?.id) {
+            return;
+        }
+        const { line, customerAge: custAge } = currentAgeCheck;
+        const minReq = line.min_age ?? 18;
+        setAgeModalBusy(true);
+        try {
+            const { data } = await medicinesApi.logAgeVerification({
+                medicine_id: line.medicine_id,
+                customer_id: selectedCustomer.id,
+                pharmacist_id: user.id,
+                customer_age: custAge,
+                min_age_required: minReq,
+                id_type_presented: ageModalIdType || undefined,
+                outcome: 'rejected',
+                pharmacist_notes: ageModalNotes.trim() || undefined,
+            });
+            appendVerificationId(data);
+            setAgeCheckQueue((q) => q.slice(1));
+            toast.error(`${line.medicine_name} removed — age verification failed`);
+        } catch (e) {
+            toast.error(e.response?.data?.message ?? 'Could not record rejection.');
+        } finally {
+            setAgeModalBusy(false);
+        }
+    }, [ageModalIdType, ageModalNotes, appendVerificationId, currentAgeCheck, selectedCustomer, user?.id]);
 
     const removeLine = useCallback((index) => {
         setLineItems((prev) => prev.filter((_, i) => i !== index));
@@ -373,9 +604,6 @@ export default function NewPrescription() {
                     medicine_id: r.medicine_id,
                     matched_allergen: String(r.allergy_matched_allergen),
                 }));
-            const acknowledged_age_restricted_medicine_ids = lineItems
-                .filter((r) => r.age_id_verified && isAgeRestrictedIssue(customerAge, r))
-                .map((r) => r.medicine_id);
 
             const { data, status } = await prescriptionsApi.createPrescription({
                 customer_id: selectedCustomer.id,
@@ -383,9 +611,16 @@ export default function NewPrescription() {
                 status: 'dispensed',
                 items: lineItems.map((r) => ({ medicine_id: r.medicine_id, quantity: r.quantity })),
                 acknowledged_allergy_overrides,
-                acknowledged_age_restricted_medicine_ids,
             });
             if (status >= 200 && status < 300) {
+                const newId = data.data?.id;
+                if (newId && completedVerificationIds.length > 0) {
+                    try {
+                        await medicinesApi.linkVerificationsToPrescription(completedVerificationIds, newId);
+                    } catch {
+                        toast.error('Prescription created but age verification logs could not be linked.');
+                    }
+                }
                 const st = data.data?.status;
                 if (st === 'pending_review') {
                     toast.success('Prescription submitted for manager review');
@@ -394,9 +629,8 @@ export default function NewPrescription() {
                 } else {
                     toast.success('Prescription created');
                 }
-                const id = data.data?.id;
-                if (id) {
-                    navigate(`/prescriptions/${id}`, { replace: true });
+                if (newId) {
+                    navigate(`/prescriptions/${newId}`, { replace: true });
                 } else {
                     navigate('/prescriptions', { replace: true });
                 }
@@ -416,7 +650,16 @@ export default function NewPrescription() {
         } finally {
             setSubmitting(false);
         }
-    }, [customerAge, lineItems, navigate, notes, selectedCustomer]);
+    }, [completedVerificationIds, lineItems, navigate, notes, selectedCustomer]);
+
+    const minForCurrent = currentAgeCheck?.line?.min_age ?? 18;
+    const medLabel = currentAgeCheck?.medicine?.age_restriction_label
+        ? String(currentAgeCheck.medicine.age_restriction_label)
+        : '';
+    const medNotes = currentAgeCheck?.medicine?.age_restriction_notes
+        ? String(currentAgeCheck.medicine.age_restriction_notes)
+        : '';
+    const canActVerified = Boolean(ageModalIdType);
 
     return (
         <div className="mx-auto max-w-3xl space-y-6">
@@ -626,7 +869,13 @@ export default function NewPrescription() {
                         {medicineSearchLoading ? (
                             <p className="text-xs text-muted-foreground">Loading stock…</p>
                         ) : null}
-                        <Button type="button" variant="secondary" className="gap-1" onClick={onAddItemClick}>
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            className="gap-1"
+                            onClick={onAddItemClick}
+                            disabled={Boolean(currentAgeCheck)}
+                        >
                             <Plus className="size-4" aria-hidden />
                             Add item
                         </Button>
@@ -641,12 +890,42 @@ export default function NewPrescription() {
                             ) : (
                                 <ul className="divide-y divide-border">
                                     {lineItems.map((row, idx) => (
-                                        <li key={`${row.medicine_id}-${idx}`} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
-                                            <span>
-                                                <span className="font-medium">{row.medicine_name}</span>
-                                                <span className="text-muted-foreground"> × {row.quantity}</span>
-                                            </span>
-                                            <Button type="button" variant="ghost" size="icon-sm" onClick={() => removeLine(idx)} aria-label="Remove">
+                                        <li
+                                            key={`${row.medicine_id}-${idx}`}
+                                            className="flex flex-col gap-1 px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between"
+                                        >
+                                            <div className="min-w-0 flex-1 space-y-1">
+                                                <div>
+                                                    <span className="font-medium">{row.medicine_name}</span>
+                                                    <span className="text-muted-foreground"> × {row.quantity}</span>
+                                                </div>
+                                                {row.age_check?.outcome === 'verified' ? (
+                                                    <Badge className="border-0 bg-emerald-600 text-white hover:bg-emerald-600">
+                                                        ID Verified — {row.age_check.id_type}
+                                                    </Badge>
+                                                ) : null}
+                                                {row.age_check?.outcome === 'exempted' ? (
+                                                    <Badge
+                                                        variant="outline"
+                                                        className="border-amber-500/60 bg-amber-500/15 text-amber-950 dark:text-amber-50"
+                                                    >
+                                                        Exemption Recorded
+                                                    </Badge>
+                                                ) : null}
+                                                {row.requires_age_check &&
+                                                isAgeRestrictedIssue(customerAge, row) &&
+                                                !row.age_check ? (
+                                                    <span className="text-xs text-destructive">Age check pending — remove and re-add</span>
+                                                ) : null}
+                                            </div>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon-sm"
+                                                className="shrink-0 self-end sm:self-center"
+                                                onClick={() => removeLine(idx)}
+                                                aria-label="Remove"
+                                            >
                                                 <Trash2 className="size-4 text-destructive" />
                                             </Button>
                                         </li>
@@ -659,7 +938,12 @@ export default function NewPrescription() {
                             <Button type="button" variant="outline" onClick={() => setStep(1)}>
                                 Back
                             </Button>
-                            <Button type="button" className="bg-teal-600 text-white hover:bg-teal-500" disabled={lineItems.length === 0} onClick={() => setStep(3)}>
+                            <Button
+                                type="button"
+                                className="bg-teal-600 text-white hover:bg-teal-500"
+                                disabled={lineItems.length === 0 || ageCheckQueue.length > 0}
+                                onClick={() => setStep(3)}
+                            >
                                 Next
                             </Button>
                         </div>
@@ -688,10 +972,22 @@ export default function NewPrescription() {
                                 <CardDescription>{lineItems.length} line(s) · {totalUnits} units total</CardDescription>
                             </CardHeader>
                             <CardContent className="py-2">
-                                <ul className="space-y-1 text-sm">
+                                <ul className="space-y-3 text-sm">
                                     {lineItems.map((row, idx) => (
                                         <li key={`${row.medicine_id}-${idx}`}>
-                                            {row.medicine_name} — {row.quantity}
+                                            <div className="font-medium">
+                                                {row.medicine_name} — {row.quantity}
+                                            </div>
+                                            {row.age_check?.outcome === 'verified' ? (
+                                                <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400">
+                                                    Age verified — {row.age_check.id_type} presented
+                                                </p>
+                                            ) : null}
+                                            {row.age_check?.outcome === 'exempted' ? (
+                                                <p className="mt-1 text-xs text-amber-800 dark:text-amber-200">
+                                                    Exemption recorded
+                                                </p>
+                                            ) : null}
                                         </li>
                                     ))}
                                 </ul>
@@ -734,25 +1030,166 @@ export default function NewPrescription() {
                 </DialogContent>
             </Dialog>
 
-            <Dialog open={ageDialog.open} onOpenChange={(o) => !o && setAgeDialog((d) => ({ ...d, open: false }))}>
-                <DialogContent className="sm:max-w-md">
-                    <DialogHeader>
-                        <DialogTitle>ID check required</DialogTitle>
-                        <DialogDescription>
-                            <strong>{ageDialog.medicineName}</strong> may require the customer to be at least{' '}
-                            <strong>{ageDialog.minAge}</strong> years old. Verify ID before proceeding.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter className="gap-2 sm:justify-end">
-                        <Button type="button" variant="outline" onClick={onAgeReject}>
-                            Reject
-                        </Button>
-                        <Button type="button" className="bg-teal-600 text-white hover:bg-teal-500" onClick={onAgeVerified}>
-                            ID verified
-                        </Button>
-                    </DialogFooter>
+            <Dialog
+                open={Boolean(currentAgeCheck)}
+                onOpenChange={() => {
+                    /* non-dismissible */
+                }}
+            >
+                <DialogContent
+                    showCloseButton={false}
+                    className="max-h-[90dvh] max-w-lg overflow-y-auto sm:max-w-lg"
+                    onPointerDownOutside={(e) => e.preventDefault()}
+                    onEscapeKeyDown={(e) => e.preventDefault()}
+                >
+                    {currentAgeCheck && selectedCustomer ? (
+                        <>
+                            <DialogHeader className="space-y-0 rounded-t-lg -mx-4 -mt-4 mb-2 border-b border-amber-500/30 bg-amber-500/15 px-4 py-3">
+                                <div className="flex items-start gap-3">
+                                    <TriangleAlert className="mt-0.5 size-6 shrink-0 text-amber-700 dark:text-amber-400" aria-hidden />
+                                    <div>
+                                        <DialogTitle className="text-amber-950 dark:text-amber-50">ID Verification Required</DialogTitle>
+                                        <DialogDescription className="text-amber-900/85 dark:text-amber-100/80">
+                                            This medicine cannot be supplied without recording ID verification for this customer.
+                                        </DialogDescription>
+                                    </div>
+                                </div>
+                            </DialogHeader>
+
+                            <div className="space-y-3 text-sm">
+                                <Card className="border-border bg-muted/30">
+                                    <CardHeader className="py-2 pb-1">
+                                        <CardTitle className="text-sm font-medium">Customer</CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="space-y-1 py-2 text-sm">
+                                        <p>
+                                            <span className="text-muted-foreground">Name: </span>
+                                            {selectedCustomer.full_name}
+                                        </p>
+                                        <p>
+                                            <span className="text-muted-foreground">Date of birth: </span>
+                                            {formatDobDisplay(selectedCustomer.dob)} — Age: {currentAgeCheck.customerAge} years
+                                        </p>
+                                        <p>
+                                            <span className="text-muted-foreground">Required age: </span>
+                                            {minForCurrent}+ years
+                                        </p>
+                                        <p className="font-medium text-destructive">
+                                            Customer is {currentAgeCheck.customerAge} years old — below the {minForCurrent} year minimum
+                                            requirement
+                                        </p>
+                                    </CardContent>
+                                </Card>
+
+                                <Card className="border-border bg-muted/30">
+                                    <CardHeader className="py-2 pb-1">
+                                        <CardTitle className="text-sm font-medium">Medicine</CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="flex flex-wrap items-center gap-2 py-2">
+                                        <span className="font-medium">{currentAgeCheck.line.medicine_name}</span>
+                                        {medLabel ? (
+                                            <Badge
+                                                variant="outline"
+                                                className="border-amber-500/60 bg-amber-500/10 text-amber-950 dark:text-amber-100"
+                                            >
+                                                {medLabel}
+                                            </Badge>
+                                        ) : null}
+                                    </CardContent>
+                                </Card>
+
+                                {medNotes ? (
+                                    <div className="rounded-lg border border-teal-500/25 bg-teal-500/10 px-3 py-2">
+                                        <p className="text-xs font-semibold uppercase tracking-wide text-teal-900 dark:text-teal-100">
+                                            Pharmacist instructions
+                                        </p>
+                                        <p className="mt-1 text-sm text-teal-950/90 dark:text-teal-50/95">{medNotes}</p>
+                                    </div>
+                                ) : null}
+
+                                <div className="space-y-2">
+                                    <Label htmlFor="id-type">ID type presented by customer</Label>
+                                    <select
+                                        id="id-type"
+                                        className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                                        value={ageModalIdType}
+                                        onChange={(e) => setAgeModalIdType(e.target.value)}
+                                    >
+                                        {ID_TYPE_OPTIONS.map((o) => (
+                                            <option key={o.value || 'placeholder'} value={o.value} disabled={o.value === ''}>
+                                                {o.label}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="rx-age-notes">Pharmacist notes (optional)</Label>
+                                    <Textarea
+                                        id="rx-age-notes"
+                                        rows={2}
+                                        placeholder="e.g. ID checked, appears valid. DOB confirmed."
+                                        value={ageModalNotes}
+                                        onChange={(e) => setAgeModalNotes(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+
+                            <DialogFooter className="flex-col gap-2 sm:items-stretch">
+                                <Button
+                                    type="button"
+                                    className="w-full bg-emerald-600 text-white hover:bg-emerald-500"
+                                    disabled={!canActVerified || ageModalBusy}
+                                    onClick={onAgeVerified}
+                                >
+                                    {ageModalBusy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
+                                    ID Verified — Add medicine
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="w-full border-amber-500/50 bg-amber-500/10 text-amber-950 hover:bg-amber-500/20 dark:text-amber-50"
+                                    disabled={!canActVerified || ageModalBusy}
+                                    onClick={() => setExemptConfirmOpen(true)}
+                                >
+                                    Customer exempt
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="destructive"
+                                    className="w-full"
+                                    disabled={ageModalBusy}
+                                    onClick={onAgeReject}
+                                >
+                                    Reject — Do not dispense
+                                </Button>
+                            </DialogFooter>
+                        </>
+                    ) : null}
                 </DialogContent>
             </Dialog>
+
+            <AlertDialog open={exemptConfirmOpen} onOpenChange={setExemptConfirmOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Confirm exemption</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Confirm this customer is legally exempt from age verification for this medicine?
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            className="bg-amber-600 text-white hover:bg-amber-500"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                void onAgeExemptConfirmed();
+                            }}
+                        >
+                            Confirm exemption
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }
