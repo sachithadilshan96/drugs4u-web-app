@@ -3,10 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\InventoryStockAllocator;
 use App\Models\AgeVerificationLog;
 use App\Models\AlertLog;
 use App\Models\Customer;
-use App\Models\Inventory;
 use App\Models\MedicationHistory;
 use App\Models\Medicine;
 use App\Models\Prescription;
@@ -22,6 +22,10 @@ use Illuminate\Validation\Rule;
 
 class PrescriptionController extends Controller
 {
+    public function __construct(
+        private readonly InventoryStockAllocator $inventoryStockAllocator,
+    ) {}
+
     public function index(Request $request): JsonResponse
     {
         $query = Prescription::query()
@@ -446,8 +450,8 @@ class PrescriptionController extends Controller
 
         foreach ($prescription->items as $item) {
             $qty = (int) $item->quantity;
-            $this->assertSufficientStock((int) $item->medicine_id, $qty);
-            $this->decrementInventoryFefo((int) $item->medicine_id, $qty);
+            $this->inventoryStockAllocator->assertSufficientNonExpiredStock((int) $item->medicine_id, $qty);
+            $this->inventoryStockAllocator->decrementNonExpiredByFefo((int) $item->medicine_id, $qty);
 
             MedicationHistory::query()->create([
                 'customer_id' => $customerId,
@@ -458,52 +462,6 @@ class PrescriptionController extends Controller
             ]);
 
             $item->update(['dispensed_qty' => $qty]);
-        }
-    }
-
-    private function assertSufficientStock(int $medicineId, int $qtyNeeded): void
-    {
-        $today = Carbon::today()->toDateString();
-        $available = (int) Inventory::query()
-            ->where('medicine_id', $medicineId)
-            ->whereDate('expiry_date', '>=', $today)
-            ->sum('quantity');
-
-        if ($available < $qtyNeeded) {
-            throw new HttpResponseException(response()->json([
-                'message' => 'Insufficient non-expired stock for one or more line items.',
-                'medicine_id' => $medicineId,
-            ], 422));
-        }
-    }
-
-    private function decrementInventoryFefo(int $medicineId, int $qtyNeeded): void
-    {
-        $today = Carbon::today()->toDateString();
-        $remaining = $qtyNeeded;
-
-        $rows = Inventory::query()
-            ->where('medicine_id', $medicineId)
-            ->whereDate('expiry_date', '>=', $today)
-            ->orderBy('expiry_date')
-            ->orderBy('id')
-            ->lockForUpdate()
-            ->get();
-
-        foreach ($rows as $row) {
-            if ($remaining <= 0) {
-                break;
-            }
-            $take = min((int) $row->quantity, $remaining);
-            if ($take <= 0) {
-                continue;
-            }
-            $row->decrement('quantity', $take);
-            $remaining -= $take;
-        }
-
-        if ($remaining > 0) {
-            throw new HttpResponseException(response()->json(['message' => 'Stock allocation failed.'], 422));
         }
     }
 
