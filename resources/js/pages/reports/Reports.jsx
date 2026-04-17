@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { BarChart3, Package, Users } from 'lucide-react';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 const cards = [
@@ -24,6 +25,8 @@ const cards = [
 ];
 
 export default function Reports() {
+    useDocumentTitle('Reports');
+
     return (
         <div className="space-y-6">
             <div>

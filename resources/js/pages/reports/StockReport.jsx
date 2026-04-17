@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Download, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import * as reportsApi from '@/api/reports';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -29,6 +30,8 @@ function statusBadge(status) {
 }
 
 export default function StockReport() {
+    useDocumentTitle('Stock report');
+
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(false);
     const [exporting, setExporting] = useState(false);
@@ -87,12 +90,16 @@ export default function StockReport() {
             </div>
 
             {loading && !data ? (
-                <Card>
-                    <CardContent className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
-                        <Loader2 className="size-5 animate-spin text-teal-600" aria-hidden />
-                        Loading…
-                    </CardContent>
-                </Card>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                        <Card key={i}>
+                            <CardHeader className="space-y-2">
+                                <Skeleton className="h-4 w-24" />
+                                <Skeleton className="h-8 w-16" />
+                            </CardHeader>
+                        </Card>
+                    ))}
+                </div>
             ) : null}
 
             {data?.summary ? (

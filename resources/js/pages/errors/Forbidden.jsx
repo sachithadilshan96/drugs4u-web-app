@@ -1,9 +1,12 @@
 import { Link } from 'react-router-dom';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 export default function Forbidden() {
+    useDocumentTitle('Access denied');
+
     return (
         <div className="flex min-h-[50vh] items-center justify-center p-6">
             <Card className="w-full max-w-md border-destructive/30">

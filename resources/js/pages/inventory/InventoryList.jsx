@@ -4,6 +4,7 @@ import { Plus, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import * as inventoryApi from '@/api/inventory';
 import * as medicinesApi from '@/api/medicines';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,6 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Skeleton } from '@/components/ui/skeleton';
 
 function formatDate(iso) {
     if (!iso) {
@@ -65,6 +67,8 @@ function statusForRow(row) {
 }
 
 export default function InventoryList() {
+    useDocumentTitle('Inventory');
+
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const addStockFromQuery = searchParams.get('addStock');
@@ -261,9 +265,25 @@ export default function InventoryList() {
                         </TableHeader>
                         <TableBody>
                             {loading ? (
-                                <TableRow>
-                                    <TableCell colSpan={5} className="h-20 text-center text-muted-foreground">Loading inventory…</TableCell>
-                                </TableRow>
+                                Array.from({ length: 6 }).map((_, i) => (
+                                    <TableRow key={i}>
+                                        <TableCell>
+                                            <Skeleton className="h-4 w-40" />
+                                        </TableCell>
+                                        <TableCell>
+                                            <Skeleton className="h-4 w-12" />
+                                        </TableCell>
+                                        <TableCell>
+                                            <Skeleton className="h-4 w-24" />
+                                        </TableCell>
+                                        <TableCell>
+                                            <Skeleton className="h-5 w-24 rounded-full" />
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            <Skeleton className="ml-auto h-8 w-24" />
+                                        </TableCell>
+                                    </TableRow>
+                                ))
                             ) : rows.length === 0 ? (
                                 <TableRow>
                                     <TableCell colSpan={5} className="h-20 text-center text-muted-foreground">No inventory rows found.</TableCell>

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useAuthStore } from '@/store/authStore';
 import * as authApi from '@/api/auth';
 import api from '@/api/axios';
@@ -11,6 +12,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 export default function Login() {
+    useDocumentTitle('Sign in');
+
     const navigate = useNavigate();
     const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
     const authReady = useAuthStore((s) => s.authReady);
@@ -19,6 +22,7 @@ export default function Login() {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
+    const [fieldErrors, setFieldErrors] = useState({});
     const [loading, setLoading] = useState(false);
 
     if (!authReady) {
@@ -39,6 +43,17 @@ export default function Login() {
     async function onSubmit(e) {
         e.preventDefault();
         setError('');
+        const next = {};
+        if (!username.trim()) {
+            next.username = 'Username is required.';
+        }
+        if (!password) {
+            next.password = 'Password is required.';
+        }
+        setFieldErrors(next);
+        if (Object.keys(next).length > 0) {
+            return;
+        }
         setLoading(true);
         try {
             await authApi.fetchCsrfCookie();
@@ -80,10 +95,16 @@ export default function Login() {
                                 type="text"
                                 autoComplete="username"
                                 value={username}
-                                onChange={(e) => setUsername(e.target.value)}
-                                required
+                                onChange={(e) => {
+                                    setUsername(e.target.value);
+                                    setFieldErrors((f) => ({ ...f, username: undefined }));
+                                }}
+                                aria-invalid={Boolean(fieldErrors.username)}
                                 className="border-slate-600 bg-slate-950/80 text-slate-50 placeholder:text-slate-500"
                             />
+                            {fieldErrors.username ? (
+                                <p className="text-xs text-red-300">{fieldErrors.username}</p>
+                            ) : null}
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="password" className="text-slate-200">
@@ -94,10 +115,16 @@ export default function Login() {
                                 type="password"
                                 autoComplete="current-password"
                                 value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                required
+                                onChange={(e) => {
+                                    setPassword(e.target.value);
+                                    setFieldErrors((f) => ({ ...f, password: undefined }));
+                                }}
+                                aria-invalid={Boolean(fieldErrors.password)}
                                 className="border-slate-600 bg-slate-950/80 text-slate-50 placeholder:text-slate-500"
                             />
+                            {fieldErrors.password ? (
+                                <p className="text-xs text-red-300">{fieldErrors.password}</p>
+                            ) : null}
                         </div>
                         <Button
                             type="submit"

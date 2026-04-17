@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import * as prescriptionsApi from '@/api/prescriptions';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import {
     AlertDialog,
     AlertDialogCancel,
@@ -17,6 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
+import { Skeleton } from '@/components/ui/skeleton';
 
 function formatWhen(iso) {
     if (!iso) {
@@ -36,6 +38,8 @@ function formatWhen(iso) {
 }
 
 export default function PendingReview() {
+    useDocumentTitle('Pending review');
+
     const [loading, setLoading] = useState(true);
     const [rows, setRows] = useState([]);
     const [notesById, setNotesById] = useState({});
@@ -100,8 +104,10 @@ export default function PendingReview() {
 
     if (loading) {
         return (
-            <div className="flex min-h-[40vh] items-center justify-center text-muted-foreground">
-                <Loader2 className="size-8 animate-spin text-teal-600" aria-hidden />
+            <div className="mx-auto max-w-3xl space-y-4">
+                <Skeleton className="h-8 w-64" />
+                <Skeleton className="h-24 w-full rounded-xl" />
+                <Skeleton className="h-48 w-full rounded-xl" />
             </div>
         );
     }

@@ -4,6 +4,7 @@ import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import * as customersApi from '@/api/customers';
 import * as reportsApi from '@/api/reports';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,8 +18,11 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function PrescriptionCustomerReport() {
+    useDocumentTitle('Prescriptions by customer');
+
     const [customerQuery, setCustomerQuery] = useState('');
     const [debounced, setDebounced] = useState('');
     const [hits, setHits] = useState([]);
@@ -173,7 +177,15 @@ export default function PrescriptionCustomerReport() {
                 </CardContent>
             </Card>
 
-            {report ? (
+            {loading && !report ? (
+                <Card>
+                    <CardContent className="space-y-3 py-8">
+                        <Skeleton className="h-8 w-56" />
+                        <Skeleton className="h-40 w-full rounded-lg" />
+                        <Skeleton className="h-40 w-full rounded-lg" />
+                    </CardContent>
+                </Card>
+            ) : report ? (
                 <Card>
                     <CardHeader>
                         <CardTitle className="text-lg">Results</CardTitle>

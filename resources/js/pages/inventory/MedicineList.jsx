@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Pencil, Pill } from 'lucide-react';
 import { toast } from 'sonner';
 import * as medicinesApi from '@/api/medicines';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useAuthStore } from '@/store/authStore';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -16,8 +17,28 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { Skeleton } from '@/components/ui/skeleton';
+
+function MedicineTableSkeleton() {
+    return (
+        <div className="space-y-2 py-2">
+            {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="flex gap-3">
+                    <Skeleton className="h-4 flex-1" />
+                    <Skeleton className="h-5 w-24 rounded-full" />
+                    <Skeleton className="h-4 w-12" />
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-4 w-16" />
+                    <Skeleton className="h-8 w-20" />
+                </div>
+            ))}
+        </div>
+    );
+}
 
 export default function MedicineList() {
+    useDocumentTitle('Medicines');
+
     const role = useAuthStore((s) => s.user?.role);
     const isAdmin = role === 'admin';
     const [searchInput, setSearchInput] = useState('');
@@ -100,7 +121,7 @@ export default function MedicineList() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                     {loading ? (
-                        <p className="text-sm text-muted-foreground">Loading…</p>
+                        <MedicineTableSkeleton />
                     ) : (
                         <Table>
                             <TableHeader>

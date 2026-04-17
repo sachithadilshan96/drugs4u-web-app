@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\AgeVerificationController;
 use App\Http\Controllers\Api\AlertController;
 use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\CustomerHealthController;
+use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\InventoryController;
 use App\Http\Controllers\Api\MedicineController;
 use App\Http\Controllers\Api\PrescriptionController;
@@ -41,6 +42,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::apiResource('medicines', MedicineController::class)->only(['index', 'store', 'show', 'update']);
 
     Route::middleware('role:manager,admin')->group(function (): void {
+        Route::get('dashboard/analytics', [DashboardController::class, 'analytics']);
         Route::get('reports/prescriptions-by-date', [ReportController::class, 'prescriptionsByDate']);
         Route::get('reports/prescriptions-by-customer', [ReportController::class, 'prescriptionsByCustomer']);
         Route::get('reports/stock', [ReportController::class, 'stockReport']);

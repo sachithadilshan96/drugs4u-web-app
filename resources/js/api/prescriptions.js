@@ -36,3 +36,11 @@ export function getPendingReview() {
 export function reviewPrescription(id, decision, notes) {
     return api.patch(`/prescriptions/${id}/review`, { decision, notes: notes || undefined });
 }
+
+/**
+ * @param {number|string} id
+ * @param {'dispensed'|'rejected'} status
+ */
+export function updatePrescriptionStatus(id, status) {
+    return api.patch(`/prescriptions/${id}/status`, { status });
+}

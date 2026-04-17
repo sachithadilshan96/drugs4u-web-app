@@ -11,7 +11,9 @@ use App\Models\Prescription;
 use App\Models\User;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
@@ -54,6 +56,52 @@ class PrescriptionInventoryApiTest extends TestCase
     public function test_guest_cannot_access_prescriptions(): void
     {
         $this->getJson('/api/prescriptions')->assertStatus(401);
+    }
+
+    public function test_prescriptions_index_filters_by_date_today(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-03-15 12:00:00', 'UTC'));
+
+        $user = User::factory()->create([
+            'username' => 'pharm_date',
+            'password' => Hash::make('password'),
+            'role' => 'pharmacist',
+        ]);
+        $this->loginAs($user);
+
+        $customer = Customer::factory()->create();
+
+        DB::table('prescriptions')->insert([
+            'customer_id' => $customer->id,
+            'pharmacist_id' => $user->id,
+            'status' => 'pending',
+            'notes' => null,
+            'flagged_reason' => null,
+            'flagged_at' => null,
+            'reviewed_by' => null,
+            'reviewed_at' => null,
+            'created_at' => '2026-03-15 09:00:00',
+            'updated_at' => '2026-03-15 09:00:00',
+        ]);
+
+        DB::table('prescriptions')->insert([
+            'customer_id' => $customer->id,
+            'pharmacist_id' => $user->id,
+            'status' => 'pending',
+            'notes' => null,
+            'flagged_reason' => null,
+            'flagged_at' => null,
+            'reviewed_by' => null,
+            'reviewed_at' => null,
+            'created_at' => '2026-03-10 09:00:00',
+            'updated_at' => '2026-03-10 09:00:00',
+        ]);
+
+        $this->getJson('/api/prescriptions?date=today&per_page=15')
+            ->assertOk()
+            ->assertJsonPath('total', 1);
+
+        Carbon::setTestNow();
     }
 
     public function test_inventory_low_stock_route_is_not_shadowed_by_show(): void

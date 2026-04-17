@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import * as customersApi from '@/api/customers';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import MedicationAllergyInput from '@/components/MedicationAllergyInput';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -37,6 +38,8 @@ export default function CustomerForm() {
     const { id } = useParams();
     const navigate = useNavigate();
     const isEdit = Boolean(id);
+
+    useDocumentTitle(isEdit ? 'Edit customer' : 'New customer');
 
     const [loading, setLoading] = useState(isEdit);
     const [saving, setSaving] = useState(false);
