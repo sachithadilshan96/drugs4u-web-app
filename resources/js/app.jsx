@@ -22,6 +22,9 @@ import InventoryList from '@/pages/inventory/InventoryList';
 import MedicineList from '@/pages/inventory/MedicineList';
 import MedicineForm from '@/pages/inventory/MedicineForm';
 import Reports from '@/pages/reports/Reports';
+import PrescriptionDateReport from '@/pages/reports/PrescriptionDateReport';
+import PrescriptionCustomerReport from '@/pages/reports/PrescriptionCustomerReport';
+import StockReport from '@/pages/reports/StockReport';
 import AlertsLog from '@/pages/alerts/AlertsLog';
 import UserManagement from '@/pages/admin/UserManagement';
 
@@ -91,6 +94,9 @@ function AppRoutes() {
                         <Route path="/medicines/:id/edit" element={<ProtectedRoute requiredRole="admin"><MedicineForm /></ProtectedRoute>} />
                         <Route path="/medicines" element={<MedicineList />} />
                         <Route path="/inventory" element={<InventoryList />} />
+                        <Route path="/reports/prescriptions-by-date" element={<PrescriptionDateReport />} />
+                        <Route path="/reports/prescriptions-by-customer" element={<PrescriptionCustomerReport />} />
+                        <Route path="/reports/stock" element={<StockReport />} />
                         <Route path="/reports" element={<Reports />} />
                         <Route path="/alerts" element={<AlertsLog />} />
                         <Route path="/admin/users" element={<UserManagement />} />

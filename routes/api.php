@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\CustomerHealthController;
 use App\Http\Controllers\Api\InventoryController;
 use App\Http\Controllers\Api\MedicineController;
 use App\Http\Controllers\Api\PrescriptionController;
+use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -38,6 +39,12 @@ Route::middleware('auth:sanctum')->group(function (): void {
         ->middleware('role.manager_or_admin');
 
     Route::apiResource('medicines', MedicineController::class)->only(['index', 'store', 'show', 'update']);
+
+    Route::middleware('role:manager,admin')->group(function (): void {
+        Route::get('reports/prescriptions-by-date', [ReportController::class, 'prescriptionsByDate']);
+        Route::get('reports/prescriptions-by-customer', [ReportController::class, 'prescriptionsByCustomer']);
+        Route::get('reports/stock', [ReportController::class, 'stockReport']);
+    });
 
     Route::middleware('role.admin')->group(function (): void {
         Route::apiResource('users', UserController::class)->only(['index', 'store', 'destroy']);
