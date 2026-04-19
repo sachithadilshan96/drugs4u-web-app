@@ -8,6 +8,9 @@ final class RxNormService
 {
     private const BASE = 'https://rxnav.nlm.nih.gov/REST';
 
+    /** Max rows returned to clients (branded SBD concepts only). */
+    private const SEARCH_RESULT_LIMIT = 50;
+
     /**
      * @return list<array<string, mixed>>
      */
@@ -51,24 +54,27 @@ final class RxNormService
                 if ($name === '' || $rxcui === '') {
                     continue;
                 }
-                $parsed = $this->parseDrugName($name);
+                if ($tty !== 'SBD') {
+                    continue;
+                }
+
+                [$nameForParse, $bracketBrand] = $this->stripTrailingBracketBrand($name);
+                $parsed = $this->parseDrugName($nameForParse);
                 $out[] = array_merge($parsed, [
                     'rxcui' => $rxcui,
                     'tty' => $tty,
-                    'is_branded' => $tty === 'SBD',
+                    'is_branded' => true,
                     'raw_name' => $name,
+                    'brand_name' => $bracketBrand,
                 ]);
             }
         }
 
         usort($out, function (array $a, array $b): int {
-            $ba = ($a['is_branded'] ?? false) ? 1 : 0;
-            $bb = ($b['is_branded'] ?? false) ? 1 : 0;
-
-            return $bb <=> $ba;
+            return strcasecmp((string) ($a['raw_name'] ?? ''), (string) ($b['raw_name'] ?? ''));
         });
 
-        return $out;
+        return array_slice($out, 0, self::SEARCH_RESULT_LIMIT);
     }
 
     /**
@@ -98,6 +104,23 @@ final class RxNormService
         }
 
         return array_values(array_filter(array_map('strval', $suggestions)));
+    }
+
+    /**
+     * RxNorm SBD strings often end with a trade name in square brackets, e.g. "… Oral Tablet [Advil]".
+     *
+     * @return array{0: string, 1: string|null} [name without trailing bracket, brand or null]
+     */
+    private function stripTrailingBracketBrand(string $name): array
+    {
+        $trim = trim($name);
+        if (preg_match('/\s*\[([^\]]{1,200})\]\s*$/u', $trim, $m)) {
+            $brand = trim($m[1]);
+
+            return [trim(preg_replace('/\s*\[[^\]]+\]\s*$/u', '', $trim)), $brand !== '' ? $brand : null];
+        }
+
+        return [$trim, null];
     }
 
     /**
