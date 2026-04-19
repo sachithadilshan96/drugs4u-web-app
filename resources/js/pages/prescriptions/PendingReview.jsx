@@ -181,7 +181,14 @@ export default function PendingReview() {
                                             <ul className="mt-1 list-inside list-disc text-sm">
                                                 {items.map((row) => (
                                                     <li key={row.id}>
-                                                        {row.medicine_name ?? '—'} × {row.quantity}
+                                                        <span className="font-medium">{row.medicine_name ?? '—'}</span>
+                                                        {row.variant_display ? (
+                                                            <span className="text-muted-foreground"> — {row.variant_display}</span>
+                                                        ) : null}
+                                                        {row.package_description ? (
+                                                            <span className="text-muted-foreground"> — {row.package_description}</span>
+                                                        ) : null}
+                                                        {' '}× {row.quantity}
                                                     </li>
                                                 ))}
                                             </ul>

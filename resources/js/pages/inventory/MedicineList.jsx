@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Pencil, Pill } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Eye, Pill } from 'lucide-react';
 import { toast } from 'sonner';
 import * as medicinesApi from '@/api/medicines';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
-import { useAuthStore } from '@/store/authStore';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -39,8 +38,6 @@ function MedicineTableSkeleton() {
 export default function MedicineList() {
     useDocumentTitle('Medicines');
 
-    const role = useAuthStore((s) => s.user?.role);
-    const isAdmin = role === 'admin';
     const [searchInput, setSearchInput] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
     const [page, setPage] = useState(1);
@@ -94,22 +91,20 @@ export default function MedicineList() {
             <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                     <h1 className="font-heading text-2xl font-semibold tracking-tight">Medicines</h1>
-                    <p className="mt-1 text-sm text-muted-foreground">Catalogue, age restrictions, and stock totals.</p>
+                    <p className="mt-1 text-sm text-muted-foreground">Catalogue, variants, suppliers, and age restrictions.</p>
                 </div>
-                {isAdmin ? (
-                    <Button asChild className="shrink-0 gap-2 bg-teal-600 text-white hover:bg-teal-500">
-                        <Link to="/medicines/new">
-                            <Pill className="size-4" aria-hidden />
-                            Add Medicine
-                        </Link>
-                    </Button>
-                ) : null}
+                <Button asChild className="shrink-0 gap-2 bg-teal-600 text-white hover:bg-teal-500">
+                    <Link to="/medicines/add">
+                        <Pill className="size-4" aria-hidden />
+                        Add medicine
+                    </Link>
+                </Button>
             </div>
 
             <Card>
                 <CardHeader className="space-y-1 pb-4">
                     <CardTitle className="text-lg">Medicine directory</CardTitle>
-                    <CardDescription>Search by name. Stock is summed across inventory batches.</CardDescription>
+                    <CardDescription>Search by name. Stock is tracked per package in inventory.</CardDescription>
                     <Input
                         type="search"
                         placeholder="Search medicines…"
@@ -127,57 +122,71 @@ export default function MedicineList() {
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>Name</TableHead>
+                                    <TableHead>Variants</TableHead>
+                                    <TableHead>Packages</TableHead>
+                                    <TableHead>Suppliers</TableHead>
                                     <TableHead>Age restricted</TableHead>
-                                    <TableHead>Min age</TableHead>
-                                    <TableHead>Restriction label</TableHead>
-                                    <TableHead>Stock</TableHead>
+                                    <TableHead>Source</TableHead>
                                     <TableHead className="text-right">Actions</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {rows.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                                        <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
                                             No medicines match your search.
                                         </TableCell>
                                     </TableRow>
                                 ) : (
                                     rows.map((m) => {
-                                        const min = m.min_age;
                                         const restricted = Boolean(m.requires_age_check);
+                                        const min = m.min_age;
                                         return (
                                             <TableRow key={m.id}>
                                                 <TableCell className="font-medium">{m.name}</TableCell>
                                                 <TableCell>
+                                                    <Badge variant="secondary" className="tabular-nums">
+                                                        {m.variants_count ?? 0} variants
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Badge variant="outline" className="tabular-nums">
+                                                        {m.packages_count ?? 0} packages
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="max-w-[10rem] truncate text-sm">
+                                                    {m.preferred_supplier_name ? (
+                                                        <span title={m.preferred_supplier_name}>{m.preferred_supplier_name}</span>
+                                                    ) : (
+                                                        <span className="text-muted-foreground">{m.suppliers_count ?? 0} linked</span>
+                                                    )}
+                                                </TableCell>
+                                                <TableCell>
                                                     {restricted ? (
                                                         <Badge variant="destructive" className="font-semibold uppercase tracking-wide">
-                                                            {min != null ? `${min}+ ID Required` : '18+ ID Required'}
+                                                            {min != null ? `${min}+` : '18+'}
                                                         </Badge>
                                                     ) : (
                                                         <Badge
                                                             variant="outline"
                                                             className="border-emerald-500/50 bg-emerald-950/35 font-semibold text-emerald-100"
                                                         >
-                                                            No restriction
+                                                            None
                                                         </Badge>
                                                     )}
                                                 </TableCell>
-                                                <TableCell>{restricted && min != null ? min : '—'}</TableCell>
-                                                <TableCell className="max-w-[12rem] truncate text-muted-foreground text-sm">
-                                                    {m.age_restriction_label ?? '—'}
+                                                <TableCell>
+                                                    <Badge variant={m.source === 'RxNorm' ? 'default' : 'secondary'}>
+                                                        {m.source === 'RxNorm' ? 'RxNorm' : 'Manual'}
+                                                    </Badge>
                                                 </TableCell>
-                                                <TableCell>{m.stock_quantity ?? 0}</TableCell>
                                                 <TableCell className="text-right">
-                                                    {isAdmin ? (
-                                                        <Button variant="outline" size="sm" className="gap-1" asChild>
-                                                            <Link to={`/medicines/${m.id}/edit`}>
-                                                                <Pencil className="size-3.5" aria-hidden />
-                                                                Edit
-                                                            </Link>
-                                                        </Button>
-                                                    ) : (
-                                                        <span className="text-xs text-muted-foreground">View only</span>
-                                                    )}
+                                                    <Button variant="outline" size="sm" className="gap-1" asChild>
+                                                        <Link to={`/medicines/${m.id}`}>
+                                                            <Eye className="size-3.5" aria-hidden />
+                                                            View
+                                                        </Link>
+                                                    </Button>
                                                 </TableCell>
                                             </TableRow>
                                         );

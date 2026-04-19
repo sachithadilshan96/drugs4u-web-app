@@ -25,26 +25,25 @@ class InventoryController extends Controller
         $today = Carbon::today();
 
         $query = Inventory::query()
-            ->with('medicine')
+            ->with(['package.variant.medicine', 'supplier'])
             ->select('inventory.*')
             ->selectSub(
                 Inventory::query()
                     ->from('inventory as i2')
-                    ->whereColumn('i2.medicine_id', 'inventory.medicine_id')
+                    ->whereColumn('i2.package_id', 'inventory.package_id')
                     ->whereDate('i2.expiry_date', '>=', $today)
                     ->selectRaw('coalesce(sum(i2.quantity), 0)'),
-                'medicine_non_expired_total'
+                'package_non_expired_total'
             )
             ->orderBy('expiry_date')
             ->orderBy('id');
 
         if ($request->filled('search')) {
             $term = $request->string('search')->trim()->value();
-            $query->whereHas('medicine', fn ($m) => $m->where('name', 'like', '%'.$term.'%'));
+            $query->whereHas('package.variant.medicine', fn ($m) => $m->where('name', 'like', '%'.$term.'%'));
         }
 
         $paginator = $query->paginate(30)->withQueryString();
-
         $paginator->getCollection()->transform(fn (Inventory $inv) => $this->serializeInventoryRow($inv, $today));
 
         return response()->json($paginator);
@@ -53,14 +52,15 @@ class InventoryController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'medicine_id' => ['required', 'integer', 'exists:medicines,id'],
+            'package_id' => ['required', 'integer', 'exists:medicine_packages,id'],
+            'supplier_id' => ['nullable', 'integer', 'exists:suppliers,id'],
             'quantity' => ['required', 'integer', 'min:1', 'max:999999'],
             'expiry_date' => ['required', 'date'],
         ]);
 
         $inventory = Inventory::query()->create($validated);
-        $inventory->load('medicine');
-        $nonExpiredTotal = $this->inventoryStockAllocator->sumNonExpiredForMedicine((int) $inventory->medicine_id);
+        $inventory->load(['package.variant.medicine', 'supplier']);
+        $nonExpiredTotal = $this->inventoryStockAllocator->sumNonExpiredForPackage((int) $inventory->package_id);
 
         return response()->json([
             'data' => $this->serializeInventoryRow($inventory, null, $nonExpiredTotal),
@@ -69,8 +69,8 @@ class InventoryController extends Controller
 
     public function show(Inventory $inventory): JsonResponse
     {
-        $inventory->load('medicine');
-        $nonExpiredTotal = $this->inventoryStockAllocator->sumNonExpiredForMedicine((int) $inventory->medicine_id);
+        $inventory->load(['package.variant.medicine', 'supplier']);
+        $nonExpiredTotal = $this->inventoryStockAllocator->sumNonExpiredForPackage((int) $inventory->package_id);
 
         return response()->json([
             'data' => $this->serializeInventoryRow($inventory, null, $nonExpiredTotal),
@@ -86,10 +86,10 @@ class InventoryController extends Controller
 
         DB::transaction(function () use ($inventory, $validated) {
             if ($validated['type'] === 'dispense') {
-                $medicineId = (int) $inventory->medicine_id;
+                $packageId = (int) $inventory->package_id;
                 $qty = (int) $validated['quantity'];
-                $this->inventoryStockAllocator->assertSufficientNonExpiredStock($medicineId, $qty);
-                $this->inventoryStockAllocator->decrementNonExpiredByFefo($medicineId, $qty);
+                $this->inventoryStockAllocator->assertSufficientNonExpiredStockForPackage($packageId, $qty);
+                $this->inventoryStockAllocator->decrementNonExpiredByFefoForPackage($packageId, $qty);
 
                 return;
             }
@@ -98,11 +98,11 @@ class InventoryController extends Controller
             $locked->increment('quantity', $validated['quantity']);
         });
 
-        $fresh = $inventory->fresh(['medicine']);
-        $medicineId = (int) $inventory->medicine_id;
-        $nonExpiredTotal = $this->inventoryStockAllocator->sumNonExpiredForMedicine($medicineId);
+        $fresh = $inventory->fresh(['package.variant.medicine', 'supplier']);
+        $packageId = (int) $inventory->package_id;
+        $nonExpiredTotal = $this->inventoryStockAllocator->sumNonExpiredForPackage($packageId);
 
-        foreach (Inventory::query()->where('medicine_id', $medicineId)->get() as $row) {
+        foreach (Inventory::query()->where('package_id', $packageId)->get() as $row) {
             $this->maybeCreateLowStockAlert($row);
         }
 
@@ -122,15 +122,16 @@ class InventoryController extends Controller
     {
         $today = Carbon::today();
         $rows = Inventory::query()
-            ->with('medicine')
+            ->with(['package.variant.medicine', 'supplier'])
             ->where('quantity', '<', 10)
             ->orderBy('quantity')
             ->orderBy('expiry_date')
             ->get()
             ->map(function (Inventory $inv) use ($today) {
-                $nonExpiredTotal = $this->inventoryStockAllocator->sumNonExpiredForMedicine((int) $inv->medicine_id);
+                $packageId = (int) $inv->package_id;
+                $nonExpiredTotal = $this->inventoryStockAllocator->sumNonExpiredForPackage($packageId);
                 $payload = $this->serializeInventoryRow($inv, $today, $nonExpiredTotal);
-                $payload['alert_id'] = $this->openLowStockAlertIdForMedicine($inv);
+                $payload['alert_id'] = $this->openLowStockAlertIdForPackage($inv);
 
                 return $payload;
             });
@@ -144,11 +145,13 @@ class InventoryController extends Controller
             return;
         }
 
-        $inventory->loadMissing('medicine');
+        $inventory->loadMissing('package.variant.medicine');
+        $packageId = (int) $inventory->package_id;
+        $label = $inventory->package?->full_description ?? 'package #'.$packageId;
 
         $exists = AlertLog::query()
             ->where('alert_type', 'low_stock')
-            ->where('reference_id', $inventory->medicine_id)
+            ->where('reference_id', $packageId)
             ->where('dismissed', false)
             ->exists();
 
@@ -158,19 +161,20 @@ class InventoryController extends Controller
 
         AlertLog::query()->create([
             'alert_type' => 'low_stock',
-            'reference_id' => $inventory->medicine_id,
-            'message' => 'Quantity below threshold ('.(int) $inventory->quantity.' units) for '.($inventory->medicine?->name ?? 'medicine #'.$inventory->medicine_id),
+            'reference_id' => $packageId,
+            'message' => 'Quantity below threshold ('.(int) $inventory->quantity.' units) for '.$label,
             'dismissed' => false,
         ]);
     }
 
-    private function openLowStockAlertIdForMedicine(Inventory $inventory): ?int
+    private function openLowStockAlertIdForPackage(Inventory $inventory): ?int
     {
-        $inventory->loadMissing('medicine');
+        $inventory->loadMissing('package.variant.medicine');
+        $packageId = (int) $inventory->package_id;
 
         $existing = AlertLog::query()
             ->where('alert_type', 'low_stock')
-            ->where('reference_id', $inventory->medicine_id)
+            ->where('reference_id', $packageId)
             ->where('dismissed', false)
             ->latest('id')
             ->first();
@@ -181,17 +185,18 @@ class InventoryController extends Controller
 
         $hasAnyPriorAlert = AlertLog::query()
             ->where('alert_type', 'low_stock')
-            ->where('reference_id', $inventory->medicine_id)
+            ->where('reference_id', $packageId)
             ->exists();
 
         if ($hasAnyPriorAlert) {
             return null;
         }
 
+        $label = $inventory->package?->full_description ?? 'package #'.$packageId;
         $created = AlertLog::query()->create([
             'alert_type' => 'low_stock',
-            'reference_id' => $inventory->medicine_id,
-            'message' => 'Quantity below threshold ('.(int) $inventory->quantity.' units) for '.($inventory->medicine?->name ?? 'medicine #'.$inventory->medicine_id),
+            'reference_id' => $packageId,
+            'message' => 'Quantity below threshold ('.(int) $inventory->quantity.' units) for '.$label,
             'dismissed' => false,
         ]);
 
@@ -199,32 +204,37 @@ class InventoryController extends Controller
     }
 
     /**
+     * @param  ?int  $packageNonExpiredTotalOverride
      * @return array<string, mixed>
      */
-    /**
-     * @param  ?int  $medicineNonExpiredTotalOverride  Total non-expired qty for this medicine (all batches); used when the model row is not from the list subquery.
-     */
-    private function serializeInventoryRow(Inventory $inv, ?Carbon $today = null, ?int $medicineNonExpiredTotalOverride = null): array
+    private function serializeInventoryRow(Inventory $inv, ?Carbon $today = null, ?int $packageNonExpiredTotalOverride = null): array
     {
         $today ??= Carbon::today();
         $exp = $inv->expiry_date;
 
-        $medicineNonExpiredTotal = $medicineNonExpiredTotalOverride;
-        if ($medicineNonExpiredTotal === null && array_key_exists('medicine_non_expired_total', $inv->getAttributes())) {
-            $medicineNonExpiredTotal = (int) $inv->medicine_non_expired_total;
+        $inv->loadMissing('package.variant.medicine');
+        $med = $inv->package?->variant?->medicine;
+
+        $packageNonExpiredTotal = $packageNonExpiredTotalOverride;
+        if ($packageNonExpiredTotal === null && array_key_exists('package_non_expired_total', $inv->getAttributes())) {
+            $packageNonExpiredTotal = (int) $inv->package_non_expired_total;
         }
-        if ($medicineNonExpiredTotal === null) {
-            $medicineNonExpiredTotal = (int) $inv->quantity;
+        if ($packageNonExpiredTotal === null) {
+            $packageNonExpiredTotal = (int) $inv->quantity;
         }
 
         return [
             'id' => $inv->id,
-            'medicine_id' => $inv->medicine_id,
-            'medicine_name' => $inv->medicine?->name,
-            'requires_age_check' => (bool) ($inv->medicine?->requires_age_check ?? false),
-            'min_age' => (int) ($inv->medicine?->min_age ?? 18),
+            'package_id' => $inv->package_id,
+            'supplier_id' => $inv->supplier_id,
+            'medicine_id' => $med?->id,
+            'medicine_name' => $med?->name,
+            'package_description' => $inv->package?->full_description,
+            'requires_age_check' => (bool) ($med?->requires_age_check ?? false),
+            'min_age' => $med?->min_age !== null ? (int) $med->min_age : null,
             'quantity' => $inv->quantity,
-            'medicine_non_expired_total' => $medicineNonExpiredTotal,
+            'medicine_non_expired_total' => $packageNonExpiredTotal,
+            'package_non_expired_total' => $packageNonExpiredTotal,
             'expiry_date' => $exp?->toDateString(),
             'is_low_stock' => $inv->quantity < 10,
             'is_expired' => $exp !== null && $exp->lt($today),

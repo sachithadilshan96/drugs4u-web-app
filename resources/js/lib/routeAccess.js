@@ -13,7 +13,8 @@ const PATH_PREFIX_ROLES = [
     { prefix: '/customers', roles: ['pharmacist', 'admin'] },
     { prefix: '/prescriptions/pending-review', roles: ['manager', 'admin'] },
     { prefix: '/prescriptions', roles: ['pharmacist', 'manager', 'admin'] },
-    { prefix: '/medicines', roles: ['pharmacist', 'manager', 'admin'] },
+    { prefix: '/suppliers', roles: ['manager', 'admin'] },
+    { prefix: '/medicines', roles: ['manager', 'admin'] },
     { prefix: '/inventory', roles: ['pharmacist', 'manager', 'admin'] },
     { prefix: '/dashboard', roles: ['pharmacist', 'manager', 'admin'] },
 ];
@@ -24,9 +25,6 @@ const PATH_PREFIX_ROLES = [
  */
 export function rolesAllowedForPath(pathname) {
     const path = pathname.endsWith('/') && pathname.length > 1 ? pathname.slice(0, -1) : pathname;
-    if (path === '/medicines/new' || /^\/medicines\/\d+\/edit$/.test(path)) {
-        return ['admin'];
-    }
     for (const { prefix, roles } of PATH_PREFIX_ROLES) {
         if (path === prefix || path.startsWith(`${prefix}/`)) {
             return roles;
@@ -63,9 +61,6 @@ export function requiredRoleForSoftRedirect(pathname) {
     if (path === '/admin/users' || path.startsWith('/admin/users/')) {
         return 'admin';
     }
-    if (path === '/medicines/new' || /^\/medicines\/\d+\/edit$/.test(path)) {
-        return 'admin';
-    }
     return undefined;
 }
 
@@ -80,9 +75,13 @@ const TITLE_RULES = [
     { pattern: /^\/prescriptions\/new\/?$/, title: 'New prescription' },
     { pattern: /^\/prescriptions\/\d+\/?$/, title: 'Prescription' },
     { pattern: /^\/prescriptions\/?$/, title: 'Prescriptions' },
-    { pattern: /^\/medicines\/new\/?$/, title: 'Add medicine' },
-    { pattern: /^\/medicines\/\d+\/edit\/?$/, title: 'Edit medicine' },
+    { pattern: /^\/medicines\/add\/?$/, title: 'Add medicine' },
+    { pattern: /^\/medicines\/\d+\/?$/, title: 'Medicine' },
     { pattern: /^\/medicines\/?$/, title: 'Medicines' },
+    { pattern: /^\/suppliers\/add\/?$/, title: 'Add supplier' },
+    { pattern: /^\/suppliers\/\d+\/edit\/?$/, title: 'Edit supplier' },
+    { pattern: /^\/suppliers\/\d+\/?$/, title: 'Supplier' },
+    { pattern: /^\/suppliers\/?$/, title: 'Suppliers' },
     { pattern: /^\/inventory\/?$/, title: 'Inventory' },
     { pattern: /^\/reports\/prescriptions-by-date\/?$/, title: 'Prescriptions by date' },
     { pattern: /^\/reports\/prescriptions-by-customer\/?$/, title: 'Prescriptions by customer' },

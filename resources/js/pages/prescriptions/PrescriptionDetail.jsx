@@ -167,7 +167,7 @@ export default function PrescriptionDetail() {
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead>Medicine</TableHead>
+                                    <TableHead>Product</TableHead>
                                     <TableHead>Quantity</TableHead>
                                     <TableHead>Dispensed</TableHead>
                                 </TableRow>
@@ -175,7 +175,15 @@ export default function PrescriptionDetail() {
                             <TableBody>
                                 {items.map((row) => (
                                     <TableRow key={row.id}>
-                                        <TableCell className="font-medium">{row.medicine_name ?? '—'}</TableCell>
+                                        <TableCell className="font-medium">
+                                            <div>{row.medicine_name ?? '—'}</div>
+                                            {row.variant_display ? (
+                                                <div className="text-xs text-muted-foreground">{row.variant_display}</div>
+                                            ) : null}
+                                            {row.package_description ? (
+                                                <div className="text-xs text-muted-foreground">{row.package_description}</div>
+                                            ) : null}
+                                        </TableCell>
                                         <TableCell>{row.quantity}</TableCell>
                                         <TableCell>{row.dispensed_qty ?? 0}</TableCell>
                                     </TableRow>
