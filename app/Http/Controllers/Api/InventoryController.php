@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Models\AlertLog;
 use App\Models\Inventory;
 use App\Services\InventoryStockAllocator;
-use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -40,7 +39,12 @@ class InventoryController extends Controller
 
         if ($request->filled('search')) {
             $term = $request->string('search')->trim()->value();
-            $query->whereHas('package.variant.medicine', fn ($m) => $m->where('name', 'like', '%'.$term.'%'));
+            $like = '%'.$term.'%';
+            $query->where(function ($q) use ($like) {
+                $q->whereHas('package.variant.medicine', fn ($m) => $m->where('name', 'like', $like))
+                    ->orWhereHas('package', fn ($p) => $p->where('package_description', 'like', $like)
+                        ->orWhere('package_unit', 'like', $like));
+            });
         }
 
         $paginator = $query->paginate(30)->withQueryString();
@@ -204,7 +208,6 @@ class InventoryController extends Controller
     }
 
     /**
-     * @param  ?int  $packageNonExpiredTotalOverride
      * @return array<string, mixed>
      */
     private function serializeInventoryRow(Inventory $inv, ?Carbon $today = null, ?int $packageNonExpiredTotalOverride = null): array
@@ -223,13 +226,18 @@ class InventoryController extends Controller
             $packageNonExpiredTotal = (int) $inv->quantity;
         }
 
+        $pkg = $inv->package;
+
         return [
             'id' => $inv->id,
             'package_id' => $inv->package_id,
             'supplier_id' => $inv->supplier_id,
             'medicine_id' => $med?->id,
             'medicine_name' => $med?->name,
-            'package_description' => $inv->package?->full_description,
+            'package_description' => $pkg?->full_description,
+            'package_detail' => $pkg?->package_description,
+            'package_size' => $pkg?->package_size,
+            'package_unit' => $pkg?->package_unit,
             'requires_age_check' => (bool) ($med?->requires_age_check ?? false),
             'min_age' => $med?->min_age !== null ? (int) $med->min_age : null,
             'quantity' => $inv->quantity,
