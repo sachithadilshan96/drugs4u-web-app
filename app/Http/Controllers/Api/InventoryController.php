@@ -143,6 +143,8 @@ class InventoryController extends Controller
             'id' => $inv->id,
             'medicine_id' => $inv->medicine_id,
             'medicine_name' => $inv->medicine?->name,
+            'requires_age_check' => (bool) ($inv->medicine?->requires_age_check ?? false),
+            'min_age' => (int) ($inv->medicine?->min_age ?? 18),
             'quantity' => $inv->quantity,
             'expiry_date' => $exp?->toDateString(),
             'is_low_stock' => $inv->quantity < 10,

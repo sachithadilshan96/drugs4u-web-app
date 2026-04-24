@@ -310,11 +310,11 @@ export default function CustomerView() {
             <Card>
                 <CardHeader>
                     <CardTitle className="text-lg">Medication history</CardTitle>
-                    <CardDescription>Recent dispensations linked to this customer (last five).</CardDescription>
+                    <CardDescription>Dispensations in the last 6 months (newest first).</CardDescription>
                 </CardHeader>
                 <CardContent>
                     {history.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">No dispensed items recorded yet.</p>
+                        <p className="text-sm text-muted-foreground">No dispensed items in the last 6 months.</p>
                     ) : (
                         <Table>
                             <TableHeader>

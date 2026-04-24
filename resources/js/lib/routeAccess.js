@@ -69,6 +69,7 @@ const TITLE_RULES = [
     { pattern: /^\/customers\/[^/]+\/?$/, title: 'Customer' },
     { pattern: /^\/customers\/?$/, title: 'Customers' },
     { pattern: /^\/prescriptions\/new\/?$/, title: 'New prescription' },
+    { pattern: /^\/prescriptions\/\d+\/?$/, title: 'Prescription' },
     { pattern: /^\/prescriptions\/?$/, title: 'Prescriptions' },
     { pattern: /^\/inventory\/?$/, title: 'Inventory' },
     { pattern: /^\/reports\/?$/, title: 'Reports' },

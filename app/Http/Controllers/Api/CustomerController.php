@@ -7,6 +7,7 @@ use App\Http\Resources\CustomerCollection;
 use App\Http\Resources\CustomerResource;
 use App\Models\Customer;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Validation\Rule;
@@ -67,10 +68,12 @@ class CustomerController extends Controller
     {
         $customer->load('customerHealth');
 
+        $since = Carbon::now()->subMonths(6)->startOfDay();
+
         $history = $customer->medicationHistory()
             ->with('medicine')
+            ->where('dispensed_at', '>=', $since)
             ->orderByDesc('dispensed_at')
-            ->limit(5)
             ->get();
 
         $customer->setRelation('recentMedicationHistory', $history);

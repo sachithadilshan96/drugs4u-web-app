@@ -16,6 +16,7 @@ import CustomerForm from '@/pages/customers/CustomerForm';
 import CustomerView from '@/pages/customers/CustomerView';
 import PrescriptionList from '@/pages/prescriptions/PrescriptionList';
 import NewPrescription from '@/pages/prescriptions/NewPrescription';
+import PrescriptionDetail from '@/pages/prescriptions/PrescriptionDetail';
 import InventoryList from '@/pages/inventory/InventoryList';
 import Reports from '@/pages/reports/Reports';
 import AlertsLog from '@/pages/alerts/AlertsLog';
@@ -74,6 +75,7 @@ function AppRoutes() {
                         <Route path="/customers/:id" element={<CustomerView />} />
                         <Route path="/prescriptions" element={<PrescriptionList />} />
                         <Route path="/prescriptions/new" element={<NewPrescription />} />
+                        <Route path="/prescriptions/:id" element={<PrescriptionDetail />} />
                         <Route path="/inventory" element={<InventoryList />} />
                         <Route path="/reports" element={<Reports />} />
                         <Route path="/alerts" element={<AlertsLog />} />
