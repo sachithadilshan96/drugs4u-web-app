@@ -6,6 +6,7 @@ use App\Models\Inventory;
 use App\Models\Medicine;
 use App\Models\MedicinePackage;
 use App\Models\MedicineVariant;
+use App\Models\Supplier;
 
 final class PharmaFixtures
 {
@@ -20,6 +21,22 @@ final class PharmaFixtures
         array $variantAttrs = [],
         array $packageAttrs = [],
     ): array {
+        $supplierId = Supplier::query()->value('id');
+        if ($supplierId === null) {
+            $supplierId = Supplier::query()->create([
+                'name' => 'Fixture Supplier',
+                'contact_person' => null,
+                'phone' => null,
+                'email' => null,
+                'address_line1' => null,
+                'address_line2' => null,
+                'city' => null,
+                'postcode' => null,
+                'notes' => null,
+                'is_active' => true,
+            ])->id;
+        }
+
         $medicine = Medicine::query()->create(array_merge([
             'name' => 'Test Med',
             'rxcui' => null,
@@ -31,6 +48,7 @@ final class PharmaFixtures
 
         $variant = MedicineVariant::query()->create(array_merge([
             'medicine_id' => $medicine->id,
+            'supplier_id' => $supplierId,
             'brand_name' => null,
             'manufacturer' => null,
             'strength' => '500 MG',
@@ -41,6 +59,7 @@ final class PharmaFixtures
 
         $package = MedicinePackage::query()->create(array_merge([
             'variant_id' => $variant->id,
+            'supplier_id' => $variant->supplier_id,
             'package_description' => 'Blister pack of 28 tablets',
             'package_size' => 28,
             'package_unit' => 'Tablets',

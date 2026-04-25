@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class MedicineController extends Controller
 {
@@ -173,16 +174,18 @@ class MedicineController extends Controller
             'variants' => ['required', 'array', 'min:1'],
             'variants.*.brand_name' => ['nullable', 'string', 'max:255'],
             'variants.*.manufacturer' => ['nullable', 'string', 'max:255'],
+            'variants.*.supplier_id' => ['nullable', 'integer', 'exists:suppliers,id'],
             'variants.*.strength' => ['required', 'string', 'max:50'],
             'variants.*.form' => ['required', 'string', 'max:100'],
             'variants.*.route' => ['nullable', 'string', 'max:100'],
             'variants.*.rxcui_variant' => ['nullable', 'string', 'max:50'],
             'variants.*.packages' => ['required', 'array', 'min:1'],
+            'variants.*.packages.*.supplier_id' => ['nullable', 'integer', 'exists:suppliers,id'],
             'variants.*.packages.*.package_description' => ['required', 'string', 'max:255'],
             'variants.*.packages.*.package_size' => ['required', 'integer', 'min:1'],
             'variants.*.packages.*.package_unit' => ['required', 'string', 'max:50'],
             'variants.*.packages.*.barcode' => ['nullable', 'string', 'max:100', 'distinct', Rule::unique('medicine_packages', 'barcode')],
-            'supplier_ids' => ['nullable', 'array'],
+            'supplier_ids' => ['required', 'array', 'min:1'],
             'supplier_ids.*' => ['integer', 'exists:suppliers,id'],
             'preferred_supplier_id' => ['nullable', 'integer', 'exists:suppliers,id'],
         ]);
@@ -210,8 +213,10 @@ class MedicineController extends Controller
             ]);
 
             foreach ($validated['variants'] as $vRow) {
+                $variantSupplierId = $this->resolveVariantSupplierId($vRow, $supplierIds, $preferredId);
                 $variant = MedicineVariant::query()->create([
                     'medicine_id' => $m->id,
+                    'supplier_id' => $variantSupplierId,
                     'brand_name' => $vRow['brand_name'] ?? null,
                     'manufacturer' => $vRow['manufacturer'] ?? null,
                     'strength' => $vRow['strength'],
@@ -220,8 +225,10 @@ class MedicineController extends Controller
                     'rxcui_variant' => $vRow['rxcui_variant'] ?? null,
                 ]);
                 foreach ($vRow['packages'] as $pRow) {
+                    $packageSupplierId = $pRow['supplier_id'] ?? $variantSupplierId;
                     MedicinePackage::query()->create([
                         'variant_id' => $variant->id,
+                        'supplier_id' => $packageSupplierId,
                         'package_description' => $pRow['package_description'],
                         'package_size' => $pRow['package_size'],
                         'package_unit' => $pRow['package_unit'],
@@ -241,7 +248,8 @@ class MedicineController extends Controller
             }
 
             $fresh = $m->fresh([
-                'variants.packages',
+                'variants.supplier',
+                'variants.packages.supplier',
                 'medicineSuppliers.supplier',
             ]);
             $fresh->loadCount(['variants', 'medicineSuppliers as suppliers_count']);
@@ -255,7 +263,8 @@ class MedicineController extends Controller
     public function show(Medicine $medicine): JsonResponse
     {
         $medicine->load([
-            'variants.packages',
+            'variants.supplier',
+            'variants.packages.supplier',
             'medicineSuppliers.supplier',
         ]);
         $medicine->loadCount(['variants', 'medicineSuppliers as suppliers_count']);
@@ -283,7 +292,8 @@ class MedicineController extends Controller
         $medicine->update($validated);
 
         $fresh = $medicine->fresh([
-            'variants.packages',
+            'variants.supplier',
+            'variants.packages.supplier',
             'medicineSuppliers.supplier',
         ]);
         $fresh->loadCount(['variants', 'medicineSuppliers as suppliers_count']);
@@ -402,6 +412,8 @@ class MedicineController extends Controller
         $base = $this->serializeListRow($m);
         $base['variants'] = $m->variants->map(fn (MedicineVariant $v) => [
             'id' => $v->id,
+            'supplier_id' => $v->supplier_id,
+            'supplier_name' => $v->supplier?->name,
             'brand_name' => $v->brand_name,
             'manufacturer' => $v->manufacturer,
             'strength' => $v->strength,
@@ -411,6 +423,8 @@ class MedicineController extends Controller
             'display_name' => $v->display_name,
             'packages' => $v->packages->map(fn (MedicinePackage $p) => [
                 'id' => $p->id,
+                'supplier_id' => $p->supplier_id,
+                'supplier_name' => $p->supplier?->name,
                 'package_description' => $p->package_description,
                 'package_size' => $p->package_size,
                 'package_unit' => $p->package_unit,
@@ -429,5 +443,37 @@ class MedicineController extends Controller
         ])->values()->all();
 
         return $base;
+    }
+
+    /**
+     * @param  array<string, mixed>  $variantRow
+     * @param  list<int>  $supplierIds
+     */
+    private function resolveVariantSupplierId(array $variantRow, array $supplierIds, ?int $preferredId): int
+    {
+        $variantSupplierId = $variantRow['supplier_id'] ?? $preferredId ?? ($supplierIds[0] ?? null);
+        if ($variantSupplierId === null) {
+            throw ValidationException::withMessages([
+                'variants' => 'Each variant must have a supplier.',
+            ]);
+        }
+        if (! in_array((int) $variantSupplierId, array_map('intval', $supplierIds), true)) {
+            throw ValidationException::withMessages([
+                'variants' => 'Variant supplier must be part of linked medicine suppliers.',
+            ]);
+        }
+
+        if (! empty($variantRow['packages']) && is_array($variantRow['packages'])) {
+            foreach ($variantRow['packages'] as $packageRow) {
+                $pkgSupplierId = $packageRow['supplier_id'] ?? $variantSupplierId;
+                if ((int) $pkgSupplierId !== (int) $variantSupplierId) {
+                    throw ValidationException::withMessages([
+                        'variants' => 'Package supplier must match the variant supplier.',
+                    ]);
+                }
+            }
+        }
+
+        return (int) $variantSupplierId;
     }
 }
