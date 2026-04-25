@@ -157,6 +157,20 @@ export default function AddMedicine() {
         return allSuppliers.filter((s) => s.is_active && String(s.name).toLowerCase().includes(t));
     }, [allSuppliers, supplierSearch]);
 
+    /** Group RxNorm rows by clinical base name (like prescription optgroups). */
+    const rxResultsGrouped = useMemo(() => {
+        const map = new Map();
+        for (const row of rxResults) {
+            const raw = row.base_name != null && String(row.base_name).trim() !== '' ? String(row.base_name).trim() : '';
+            const key = raw || 'Other formulations';
+            if (!map.has(key)) {
+                map.set(key, []);
+            }
+            map.get(key).push(row);
+        }
+        return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0], 'en-GB', { sensitivity: 'base' }));
+    }, [rxResults]);
+
     const step1Valid = baseName.trim() && strength.trim() && form.trim();
     const step2Valid = packages.every(
         (p) => p.package_description.trim() && p.package_size && Number(p.package_size) > 0 && p.package_unit,
@@ -317,8 +331,9 @@ export default function AddMedicine() {
                     <CardHeader>
                         <CardTitle>Clinical formulation</CardTitle>
                         <CardDescription>
-                            Search returns up to 50 branded products (RxNorm SBD). Single-click selects a row; double-click selects and hides the
-                            list. Change the search text to show results again. You can also enter details manually.
+                            Search returns up to 50 branded products (RxNorm SBD), grouped by clinical name like the prescription medicine picker.
+                            Under each name, choose a specific formulation. Single-click selects; double-click selects and hides the list. Change the
+                            search to show results again, or enter details manually.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-6">
@@ -351,47 +366,67 @@ export default function AddMedicine() {
                                 ) : null}
                                 {!rxResultsDismissed && rxResults.length > 0 ? (
                                 <div
-                                    className="max-h-[min(24rem,55vh)] space-y-2 overflow-y-auto overflow-x-hidden rounded-md border border-border bg-muted/20 p-2 [-webkit-overflow-scrolling:touch]"
+                                    className="max-h-[min(24rem,55vh)] overflow-y-auto overflow-x-hidden rounded-md border border-border bg-muted/20 p-2 [-webkit-overflow-scrolling:touch]"
                                     role="listbox"
                                     aria-label="RxNorm search results"
                                 >
-                                    {rxResults.map((row) => (
-                                        <button
-                                            key={`${row.rxcui}-${row.raw_name}`}
-                                            type="button"
-                                            role="option"
-                                            onClick={() => pickRx(row)}
-                                            onDoubleClick={(e) => {
-                                                e.preventDefault();
-                                                pickRx(row);
-                                                setRxResultsDismissed(true);
-                                            }}
-                                            className={`w-full rounded-lg border p-4 text-left transition-colors ${
-                                                selectedRx?.rxcui === row.rxcui && selectedRx?.raw_name === row.raw_name
-                                                    ? 'border-teal-500 bg-teal-950/20'
-                                                    : 'border-border bg-background hover:bg-muted/50'
-                                            }`}
-                                        >
-                                            <p className="font-semibold">{row.raw_name}</p>
-                                            <div className="mt-2 flex flex-wrap gap-2">
-                                                {row.strength ? (
-                                                    <Badge variant="default" className="bg-blue-600">
-                                                        {row.strength}
-                                                    </Badge>
-                                                ) : null}
-                                                {row.form ? (
-                                                    <Badge variant="default" className="bg-teal-700">
-                                                        {row.form}
-                                                    </Badge>
-                                                ) : null}
-                                                {row.route ? <Badge variant="secondary">{row.route}</Badge> : null}
-                                                <Badge variant="outline" className="border-amber-500 text-amber-700">
-                                                    Branded
-                                                </Badge>
+                                    <div className="space-y-4">
+                                        {rxResultsGrouped.map(([groupName, rows]) => (
+                                            <div key={groupName} className="space-y-2">
+                                                <div className="sticky top-0 z-10 -mx-1 rounded-md border border-teal-500/35 bg-gradient-to-r from-teal-950/50 to-teal-900/20 px-3 py-2 shadow-sm backdrop-blur-sm">
+                                                    <p className="font-heading text-sm font-semibold tracking-tight text-teal-600 dark:text-teal-300">
+                                                        {groupName}
+                                                    </p>
+                                                    <p className="text-[11px] text-muted-foreground">Formulations for this medicine</p>
+                                                </div>
+                                                <ul className="ml-1 space-y-2 border-l-2 border-teal-500/25 pl-3">
+                                                    {rows.map((row) => (
+                                                        <li key={`${row.rxcui}-${row.raw_name}`}>
+                                                            <button
+                                                                type="button"
+                                                                role="option"
+                                                                onClick={() => pickRx(row)}
+                                                                onDoubleClick={(e) => {
+                                                                    e.preventDefault();
+                                                                    pickRx(row);
+                                                                    setRxResultsDismissed(true);
+                                                                }}
+                                                                className={`w-full rounded-lg border p-3 text-left text-sm transition-colors ${
+                                                                    selectedRx?.rxcui === row.rxcui &&
+                                                                    selectedRx?.raw_name === row.raw_name
+                                                                        ? 'border-teal-500 bg-teal-950/25'
+                                                                        : 'border-border bg-background hover:bg-muted/50'
+                                                                }`}
+                                                            >
+                                                                <p className="font-semibold leading-snug">{row.raw_name}</p>
+                                                                <div className="mt-2 flex flex-wrap gap-1.5">
+                                                                    {row.strength ? (
+                                                                        <Badge variant="default" className="bg-blue-600 text-xs">
+                                                                            {row.strength}
+                                                                        </Badge>
+                                                                    ) : null}
+                                                                    {row.form ? (
+                                                                        <Badge variant="default" className="bg-teal-700 text-xs">
+                                                                            {row.form}
+                                                                        </Badge>
+                                                                    ) : null}
+                                                                    {row.route ? (
+                                                                        <Badge variant="secondary" className="text-xs">
+                                                                            {row.route}
+                                                                        </Badge>
+                                                                    ) : null}
+                                                                    <Badge variant="outline" className="border-amber-500 text-amber-700 text-xs">
+                                                                        Branded
+                                                                    </Badge>
+                                                                </div>
+                                                                <p className="mt-2 text-[11px] text-muted-foreground">RxCUI {row.rxcui}</p>
+                                                            </button>
+                                                        </li>
+                                                    ))}
+                                                </ul>
                                             </div>
-                                            <p className="mt-2 text-xs text-muted-foreground">RxCUI {row.rxcui}</p>
-                                        </button>
-                                    ))}
+                                        ))}
+                                    </div>
                                 </div>
                                 ) : null}
                             </>
