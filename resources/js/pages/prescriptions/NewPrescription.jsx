@@ -720,13 +720,20 @@ export default function NewPrescription() {
             ) : null}
 
             {step === 1 ? (
-                <Card>
+                <Card className="overflow-visible">
                     <CardHeader>
-                        <CardTitle className="text-lg">Step 1 — Select customer</CardTitle>
-                        <CardDescription>Search registered customers before adding medicines (US05).</CardDescription>
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                            <div>
+                                <CardTitle className="text-lg">Step 1 — Select customer</CardTitle>
+                                <CardDescription>Search registered customers before adding medicines (US05).</CardDescription>
+                            </div>
+                            <Button variant="outline" size="sm" className="shrink-0" asChild>
+                                <Link to="/customers/new">Add customer</Link>
+                            </Button>
+                        </div>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        <div className="relative space-y-2">
+                        <div className="relative z-0 space-y-2">
                             <Label htmlFor="cust-search">Search by name, phone, or ID</Label>
                             <Input
                                 id="cust-search"
@@ -739,7 +746,11 @@ export default function NewPrescription() {
                                 <p className="text-xs text-muted-foreground">Searching…</p>
                             ) : null}
                             {debouncedCustomerQuery.length >= 2 && customerHits.length > 0 ? (
-                                <ul className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-md border border-border bg-popover py-1 text-sm shadow-md">
+                                <ul
+                                    className="absolute left-0 right-0 top-full z-50 mt-1 max-h-[min(18rem,70vh)] w-full min-w-0 overflow-y-auto overflow-x-hidden rounded-md border border-border bg-popover py-1 text-sm shadow-lg"
+                                    role="listbox"
+                                    aria-label="Customer search results"
+                                >
                                     {customerHits.map((c) => (
                                         <li key={c.id}>
                                             <button
