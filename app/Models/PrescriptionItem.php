@@ -16,6 +16,8 @@ class PrescriptionItem extends Model
         'package_id',
         'quantity',
         'dispensed_qty',
+        'unit_price_at_time',
+        'quantity_dispensed',
     ];
 
     /**
@@ -26,6 +28,9 @@ class PrescriptionItem extends Model
         return [
             'quantity' => 'integer',
             'dispensed_qty' => 'integer',
+            'quantity_dispensed' => 'integer',
+            'unit_price_at_time' => 'decimal:2',
+            'line_total' => 'decimal:2',
         ];
     }
 
@@ -50,5 +55,10 @@ class PrescriptionItem extends Model
         $this->loadMissing('package.variant.medicine');
 
         return $this->package?->variant?->medicine;
+    }
+
+    public function getLineTotalAttribute($value): float
+    {
+        return (float) (($this->unit_price_at_time ?? 0) * ($this->quantity_dispensed ?? 0));
     }
 }

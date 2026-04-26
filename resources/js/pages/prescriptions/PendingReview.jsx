@@ -67,7 +67,7 @@ export default function PendingReview() {
         setBusyId(rx.id);
         try {
             await prescriptionsApi.reviewPrescription(rx.id, 'approve', notesById[rx.id]);
-            toast.success('Prescription approved and dispensed.');
+            toast.success('Prescription approved.');
             setRows((prev) => prev.filter((r) => r.id !== rx.id));
             setNotesById((n) => {
                 const next = { ...n };

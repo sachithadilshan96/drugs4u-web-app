@@ -44,5 +44,12 @@ export default defineConfig({
         watch: {
             ignored: ['**/storage/framework/views/**'],
         },
+        // If the app is opened on :5173 only, /api would hit Vite. Forward to Laravel so bill PDF fetches work.
+        proxy: {
+            '/api': {
+                target: 'http://127.0.0.1:8000',
+                changeOrigin: true,
+            },
+        },
     },
 });

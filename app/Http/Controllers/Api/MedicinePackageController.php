@@ -51,6 +51,20 @@ class MedicinePackageController extends Controller
         return response()->json(['data' => $this->serializePackage($package->fresh()->load('supplier'))]);
     }
 
+    public function updatePrice(int $id, Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'unit_price' => ['required', 'numeric', 'min:0', 'max:9999.99'],
+        ]);
+
+        $package = MedicinePackage::query()->findOrFail($id);
+        $package->update([
+            'unit_price' => $validated['unit_price'],
+        ]);
+
+        return response()->json(['data' => $this->serializePackage($package->fresh()->load('supplier'))]);
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -65,6 +79,8 @@ class MedicinePackageController extends Controller
             'package_size' => $p->package_size,
             'package_unit' => $p->package_unit,
             'barcode' => $p->barcode,
+            'unit_price' => $p->unit_price,
+            'formatted_price' => $p->formatted_price,
             'full_description' => $p->full_description,
         ];
     }

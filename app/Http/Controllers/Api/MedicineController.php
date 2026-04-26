@@ -72,8 +72,8 @@ class MedicineController extends Controller
                         ->orWhere('mv.form', 'like', $term);
                 });
             })
-            ->selectRaw('mp.id as package_id, m.id as medicine_id, m.name as medicine_name, m.requires_age_check, m.min_age, mv.brand_name, mv.strength, mv.form, coalesce(sum(i.quantity), 0) as stock')
-            ->groupBy('mp.id', 'm.id', 'm.name', 'm.requires_age_check', 'm.min_age', 'mv.brand_name', 'mv.strength', 'mv.form');
+            ->selectRaw('mp.id as package_id, m.id as medicine_id, m.name as medicine_name, m.requires_age_check, m.min_age, mv.brand_name, mv.strength, mv.form, mp.unit_price, coalesce(sum(i.quantity), 0) as stock')
+            ->groupBy('mp.id', 'm.id', 'm.name', 'm.requires_age_check', 'm.min_age', 'mv.brand_name', 'mv.strength', 'mv.form', 'mp.unit_price');
 
         if (! $catalog) {
             $invQ->havingRaw('coalesce(sum(i.quantity), 0) > 0');
@@ -94,6 +94,7 @@ class MedicineController extends Controller
                 'medicine_name' => $r->medicine_name,
                 'line_label' => $line,
                 'stock' => (int) $r->stock,
+                'unit_price' => $r->unit_price !== null ? (float) $r->unit_price : null,
                 'requires_age_check' => (bool) $r->requires_age_check,
                 'min_age' => $r->min_age !== null ? (int) $r->min_age : null,
             ];

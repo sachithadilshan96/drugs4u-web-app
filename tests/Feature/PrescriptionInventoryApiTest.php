@@ -344,21 +344,38 @@ class PrescriptionInventoryApiTest extends TestCase
         ]);
         $create = $this->postJson('/api/prescriptions', [
             'customer_id' => $customer->id,
-            'status' => 'dispensed',
+            'prescription_type' => 'nhs',
             'items' => [
                 ['package_id' => $fix['package']->id, 'quantity' => 3],
             ],
-        ])->assertCreated();
+        ])->assertCreated()
+            ->assertJsonPath('data.status', 'draft');
 
         $rxId = (int) $create->json('data.id');
+        $itemId = (int) $create->json('data.items.0.id');
+
+        $this->postJson("/api/prescriptions/{$rxId}/submit")
+            ->assertOk()
+            ->assertJsonPath('data.status', 'pending_review');
 
         $this->postJson('/api/logout')->assertOk();
         Auth::forgetGuards();
         $this->loginAs($manager);
-        $this->patchJson("/api/prescriptions/{$rxId}/review", [
-            'decision' => 'approve',
+        $this->postJson("/api/prescriptions/{$rxId}/approve", [
             'notes' => 'Verified in person.',
-        ])->assertOk()->assertJsonPath('data.status', 'dispensed');
+        ])->assertOk()->assertJsonPath('data.status', 'approved');
+
+        $inv->refresh();
+        $this->assertSame(20, (int) $inv->quantity);
+
+        $this->postJson('/api/logout')->assertOk();
+        Auth::forgetGuards();
+        $this->loginAs($pharmacist);
+        $this->postJson("/api/prescriptions/{$rxId}/dispatch", [
+            'items' => [
+                ['id' => $itemId, 'quantity_dispensed' => 3],
+            ],
+        ])->assertOk()->assertJsonPath('data.status', 'dispatched');
 
         $inv->refresh();
         $this->assertSame(17, (int) $inv->quantity);
@@ -384,7 +401,7 @@ class PrescriptionInventoryApiTest extends TestCase
         $this->loginAs($pharmacist);
         $create = $this->postJson('/api/prescriptions', [
             'customer_id' => $customer->id,
-            'status' => 'pending',
+            'prescription_type' => 'nhs',
             'items' => [
                 ['package_id' => $fix['package']->id, 'quantity' => 1],
             ],
@@ -394,8 +411,8 @@ class PrescriptionInventoryApiTest extends TestCase
 
         Prescription::query()->whereKey($rxId)->update(['status' => 'pending_review']);
 
-        $this->patchJson("/api/prescriptions/{$rxId}/review", [
-            'decision' => 'approve',
+        $this->postJson("/api/prescriptions/{$rxId}/approve", [
+            'notes' => 'Should fail',
         ])->assertForbidden();
     }
 
