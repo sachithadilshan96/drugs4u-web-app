@@ -204,8 +204,9 @@ class DatabaseSeeder extends Seeder
             $p1 = Prescription::query()->create([
                 'customer_id' => $customers[2]->id,
                 'pharmacist_id' => $john->id,
-                'status' => 'pending',
+                'status' => 'pending_review',
                 'notes' => 'Awaiting ID check for age-restricted item',
+                'prescription_type' => 'nhs',
             ]);
             PrescriptionItem::query()->create([
                 'prescription_id' => $p1->id,
@@ -220,11 +221,15 @@ class DatabaseSeeder extends Seeder
                 'dispensed_qty' => 0,
             ]);
 
+            $p2DispensedAt = now()->subDays(2);
+
             $p2 = Prescription::query()->create([
                 'customer_id' => $customers[3]->id,
                 'pharmacist_id' => $john->id,
-                'status' => 'dispensed',
+                'status' => 'dispatched',
                 'notes' => null,
+                'prescription_type' => 'nhs',
+                'dispatched_at' => $p2DispensedAt,
             ]);
             PrescriptionItem::query()->create([
                 'prescription_id' => $p2->id,
@@ -244,6 +249,7 @@ class DatabaseSeeder extends Seeder
                 'pharmacist_id' => $john->id,
                 'status' => 'rejected',
                 'notes' => 'Interaction risk — pharmacist review',
+                'prescription_type' => 'nhs',
             ]);
             PrescriptionItem::query()->create([
                 'prescription_id' => $p3->id,
@@ -255,8 +261,9 @@ class DatabaseSeeder extends Seeder
             $p4 = Prescription::query()->create([
                 'customer_id' => $customers[5]->id,
                 'pharmacist_id' => $sarah->id,
-                'status' => 'pending',
+                'status' => 'draft',
                 'notes' => null,
+                'prescription_type' => 'nhs',
             ]);
             PrescriptionItem::query()->create([
                 'prescription_id' => $p4->id,
@@ -271,11 +278,15 @@ class DatabaseSeeder extends Seeder
                 'dispensed_qty' => 0,
             ]);
 
+            $p5DispensedAt = now()->subDay();
+
             $p5 = Prescription::query()->create([
                 'customer_id' => $customers[6]->id,
                 'pharmacist_id' => $john->id,
-                'status' => 'dispensed',
+                'status' => 'dispatched',
                 'notes' => 'Repeat supply',
+                'prescription_type' => 'nhs',
+                'dispatched_at' => $p5DispensedAt,
             ]);
             PrescriptionItem::query()->create([
                 'prescription_id' => $p5->id,
@@ -296,7 +307,6 @@ class DatabaseSeeder extends Seeder
                 'dispensed_qty' => 1,
             ]);
 
-            $p2DispensedAt = now()->subDays(2);
             foreach (['Amoxicillin', 'Ibuprofen'] as $medName) {
                 MedicationHistory::query()->create([
                     'customer_id' => $customers[3]->id,
@@ -306,7 +316,6 @@ class DatabaseSeeder extends Seeder
                     'qty' => 1,
                 ]);
             }
-            $p5DispensedAt = now()->subDay();
             foreach (['Simvastatin', 'Amlodipine', 'Gabapentin'] as $medName) {
                 MedicationHistory::query()->create([
                     'customer_id' => $customers[6]->id,
