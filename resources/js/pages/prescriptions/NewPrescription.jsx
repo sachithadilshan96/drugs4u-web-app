@@ -444,43 +444,6 @@ export default function NewPrescription() {
 
                         {selectedCustomer && !customerDetailLoading ? (
                             <div className="space-y-3">
-                                {medicationAllergyDisplay.length > 0 ? (
-                                    <Alert variant="destructive" className="border-red-600/60 bg-red-950/35 text-red-50">
-                                        <AlertTitle>Medication allergies (auto-checked)</AlertTitle>
-                                        <AlertDescription>
-                                            <div className="mt-2 flex flex-wrap gap-1.5">
-                                                {medicationAllergyDisplay.map((a) => (
-                                                    <span
-                                                        key={a}
-                                                        className="rounded-md border border-red-400/50 bg-red-950/50 px-2 py-0.5 text-xs font-medium text-red-50"
-                                                    >
-                                                        {a}
-                                                    </span>
-                                                ))}
-                                            </div>
-                                        </AlertDescription>
-                                    </Alert>
-                                ) : null}
-                                {otherAllergyDisplay.length > 0 ? (
-                                    <Alert className="border-amber-500/50 bg-amber-50 text-amber-950 dark:bg-amber-950/35 dark:text-amber-50">
-                                        <AlertTitle>Other allergies</AlertTitle>
-                                        <AlertDescription>
-                                            <p className="mb-2 text-xs text-amber-900/80 dark:text-amber-100/80">
-                                                For awareness only — not matched to medicines in this step.
-                                            </p>
-                                            <div className="flex flex-wrap gap-1.5">
-                                                {otherAllergyDisplay.map((a) => (
-                                                    <span
-                                                        key={a}
-                                                        className="rounded-md border border-amber-500/40 bg-amber-100/80 px-2 py-0.5 text-xs font-medium text-amber-950 dark:bg-amber-950/50 dark:text-amber-50"
-                                                    >
-                                                        Other: {a}
-                                                    </span>
-                                                ))}
-                                            </div>
-                                        </AlertDescription>
-                                    </Alert>
-                                ) : null}
                                 <Card className="border-teal-500/20 bg-muted/30">
                                     <CardHeader className="py-3">
                                         <CardTitle className="text-base">{selectedCustomer.full_name}</CardTitle>
@@ -507,21 +470,6 @@ export default function NewPrescription() {
                                                 <span>None recorded</span>
                                             )}
                                         </div>
-                                        {otherAllergyDisplay.length > 0 ? (
-                                            <div>
-                                                <span className="text-muted-foreground">Other: </span>
-                                                <span className="inline-flex flex-wrap gap-1">
-                                                    {otherAllergyDisplay.map((a) => (
-                                                        <span
-                                                            key={a}
-                                                            className="rounded-md border border-amber-500/40 bg-amber-950/25 px-1.5 py-0.5 text-xs font-medium text-amber-100"
-                                                        >
-                                                            {a}
-                                                        </span>
-                                                    ))}
-                                                </span>
-                                            </div>
-                                        ) : null}
                                         {selectedCustomer.health?.medical_conditions ? (
                                             <p>
                                                 <span className="text-muted-foreground">Conditions: </span>
@@ -554,6 +502,47 @@ export default function NewPrescription() {
                         <CardDescription>From live stock; safety dialogs appear when rules trigger.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
+                        {selectedCustomer && medicationAllergyDisplay.length > 0 ? (
+                            <Alert variant="destructive" className="border-red-600/60 bg-red-950/35 text-red-50">
+                                <AlertTitle>Medication allergies (auto-checked)</AlertTitle>
+                                <AlertDescription>
+                                    <p className="mb-2 text-sm text-red-100/90">
+                                        {selectedCustomer.full_name} — each add is checked against these entries.
+                                    </p>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {medicationAllergyDisplay.map((a) => (
+                                            <span
+                                                key={a}
+                                                className="rounded-md border border-red-400/50 bg-red-950/50 px-2 py-0.5 text-xs font-medium text-red-50"
+                                            >
+                                                {a}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </AlertDescription>
+                            </Alert>
+                        ) : null}
+                        {selectedCustomer && otherAllergyDisplay.length > 0 ? (
+                            <Alert className="border-amber-500/50 bg-amber-50 text-amber-950 dark:bg-amber-950/35 dark:text-amber-50">
+                                <AlertTitle>Other allergies</AlertTitle>
+                                <AlertDescription>
+                                    <p className="mb-2 text-sm text-amber-900/85 dark:text-amber-100/85">
+                                        {selectedCustomer.full_name} — for pharmacist awareness only; not used for
+                                        automatic medicine matching.
+                                    </p>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {otherAllergyDisplay.map((a) => (
+                                            <span
+                                                key={a}
+                                                className="rounded-md border border-amber-500/40 bg-amber-100/80 px-2 py-0.5 text-xs font-medium text-amber-950 dark:bg-amber-950/50 dark:text-amber-50"
+                                            >
+                                                {a}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </AlertDescription>
+                            </Alert>
+                        ) : null}
                         <div className="grid gap-3 sm:grid-cols-2">
                             <div className="space-y-2 sm:col-span-2">
                                 <Label htmlFor="med-search">Search stock</Label>
