@@ -205,22 +205,37 @@ export default function NewPrescription() {
         setStep(1);
     }, [preCustomerId, loadCustomer]);
 
-    const allergyTokens = useMemo(
-        () => (selectedCustomer?.health?.allergy_list ? String(selectedCustomer.health.allergy_list) : ''),
+    /** Raw medication-allergy text only — used for Step 2 conflict checks (server uses the same field). */
+    const medicationAllergyRaw = useMemo(
+        () =>
+            selectedCustomer?.health?.medication_allergies
+                ? String(selectedCustomer.health.medication_allergies)
+                : '',
         [selectedCustomer],
     );
 
     const customerAge = useMemo(() => customerAgeFromDob(selectedCustomer?.dob), [selectedCustomer]);
 
-    const allergyListDisplay = useMemo(() => {
-        if (!allergyTokens.trim()) {
+    const medicationAllergyDisplay = useMemo(() => {
+        if (!medicationAllergyRaw.trim()) {
             return [];
         }
-        return allergyTokens
+        return medicationAllergyRaw
             .split(/[,;\n]+/)
             .map((s) => s.trim())
             .filter(Boolean);
-    }, [allergyTokens]);
+    }, [medicationAllergyRaw]);
+
+    const otherAllergyDisplay = useMemo(() => {
+        const raw = selectedCustomer?.health?.other_allergies;
+        if (!raw || typeof raw !== 'string' || !raw.trim()) {
+            return [];
+        }
+        return raw
+            .split(/[,;\n]+/)
+            .map((s) => s.trim())
+            .filter(Boolean);
+    }, [selectedCustomer]);
 
     const pushLine = useCallback((line) => {
         setLineItems((prev) => [
@@ -242,7 +257,7 @@ export default function NewPrescription() {
             if (!selectedCustomer) {
                 return;
             }
-            const rawAllergies = selectedCustomer.health?.allergy_list;
+            const rawAllergies = selectedCustomer.health?.medication_allergies;
             if (!skipAllergyCheck) {
                 const hit = findAllergenConflict(line.medicine_name, rawAllergies);
                 if (hit) {
@@ -429,15 +444,40 @@ export default function NewPrescription() {
 
                         {selectedCustomer && !customerDetailLoading ? (
                             <div className="space-y-3">
-                                {allergyListDisplay.length > 0 ? (
-                                    <Alert className="border-amber-500/50 bg-amber-50 text-amber-950 dark:bg-amber-950/35 dark:text-amber-50">
-                                        <AlertTitle>Allergies on file</AlertTitle>
+                                {medicationAllergyDisplay.length > 0 ? (
+                                    <Alert variant="destructive" className="border-red-600/60 bg-red-950/35 text-red-50">
+                                        <AlertTitle>Medication allergies (auto-checked)</AlertTitle>
                                         <AlertDescription>
-                                            <ul className="mt-2 list-inside list-disc text-sm">
-                                                {allergyListDisplay.map((a) => (
-                                                    <li key={a}>{a}</li>
+                                            <div className="mt-2 flex flex-wrap gap-1.5">
+                                                {medicationAllergyDisplay.map((a) => (
+                                                    <span
+                                                        key={a}
+                                                        className="rounded-md border border-red-400/50 bg-red-950/50 px-2 py-0.5 text-xs font-medium text-red-50"
+                                                    >
+                                                        {a}
+                                                    </span>
                                                 ))}
-                                            </ul>
+                                            </div>
+                                        </AlertDescription>
+                                    </Alert>
+                                ) : null}
+                                {otherAllergyDisplay.length > 0 ? (
+                                    <Alert className="border-amber-500/50 bg-amber-50 text-amber-950 dark:bg-amber-950/35 dark:text-amber-50">
+                                        <AlertTitle>Other allergies</AlertTitle>
+                                        <AlertDescription>
+                                            <p className="mb-2 text-xs text-amber-900/80 dark:text-amber-100/80">
+                                                For awareness only — not matched to medicines in this step.
+                                            </p>
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {otherAllergyDisplay.map((a) => (
+                                                    <span
+                                                        key={a}
+                                                        className="rounded-md border border-amber-500/40 bg-amber-100/80 px-2 py-0.5 text-xs font-medium text-amber-950 dark:bg-amber-950/50 dark:text-amber-50"
+                                                    >
+                                                        Other: {a}
+                                                    </span>
+                                                ))}
+                                            </div>
                                         </AlertDescription>
                                     </Alert>
                                 ) : null}
@@ -449,11 +489,39 @@ export default function NewPrescription() {
                                             {customerAge != null ? ` · ${customerAge} years` : ''} · {selectedCustomer.phone}
                                         </CardDescription>
                                     </CardHeader>
-                                    <CardContent className="space-y-1 py-3 text-sm">
-                                        <p>
-                                            <span className="text-muted-foreground">Allergies: </span>
-                                            {allergyTokens.trim() ? allergyTokens : 'None recorded'}
-                                        </p>
+                                    <CardContent className="space-y-2 py-3 text-sm">
+                                        <div>
+                                            <span className="text-muted-foreground">Medication allergies: </span>
+                                            {medicationAllergyDisplay.length > 0 ? (
+                                                <span className="inline-flex flex-wrap gap-1">
+                                                    {medicationAllergyDisplay.map((a) => (
+                                                        <span
+                                                            key={a}
+                                                            className="rounded-md border border-red-500/40 bg-red-950/30 px-1.5 py-0.5 text-xs font-medium text-red-100"
+                                                        >
+                                                            {a}
+                                                        </span>
+                                                    ))}
+                                                </span>
+                                            ) : (
+                                                <span>None recorded</span>
+                                            )}
+                                        </div>
+                                        {otherAllergyDisplay.length > 0 ? (
+                                            <div>
+                                                <span className="text-muted-foreground">Other: </span>
+                                                <span className="inline-flex flex-wrap gap-1">
+                                                    {otherAllergyDisplay.map((a) => (
+                                                        <span
+                                                            key={a}
+                                                            className="rounded-md border border-amber-500/40 bg-amber-950/25 px-1.5 py-0.5 text-xs font-medium text-amber-100"
+                                                        >
+                                                            {a}
+                                                        </span>
+                                                    ))}
+                                                </span>
+                                            </div>
+                                        ) : null}
                                         {selectedCustomer.health?.medical_conditions ? (
                                             <p>
                                                 <span className="text-muted-foreground">Conditions: </span>

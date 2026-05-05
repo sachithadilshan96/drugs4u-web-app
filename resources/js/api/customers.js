@@ -25,6 +25,10 @@ export function updateCustomer(id, data) {
     return api.put(`/customers/${id}`, data);
 }
 
+/**
+ * @param {number|string} customerId
+ * @param {{ medication_allergies?: string | null; other_allergies?: string | null; medical_conditions?: string | null; notes?: string | null }} data
+ */
 export function saveHealth(customerId, data) {
     return api.post(`/customers/${customerId}/health`, data);
 }

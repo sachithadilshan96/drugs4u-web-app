@@ -78,12 +78,18 @@ export default function CustomerView() {
     const [editingHealth, setEditingHealth] = useState(false);
     const [healthSaving, setHealthSaving] = useState(false);
     const [healthForm, setHealthForm] = useState({
-        allergy_list: '',
+        medication_allergies: '',
+        other_allergies: '',
         medical_conditions: '',
         notes: '',
     });
 
-    const allergies = useMemo(() => splitAllergies(customer?.health?.allergy_list), [customer]);
+    const medicationAllergyTokens = useMemo(
+        () => splitAllergies(customer?.health?.medication_allergies),
+        [customer],
+    );
+    const otherAllergyTokens = useMemo(() => splitAllergies(customer?.health?.other_allergies), [customer]);
+    const hasAnyAllergyText = medicationAllergyTokens.length > 0 || otherAllergyTokens.length > 0;
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -92,7 +98,8 @@ export default function CustomerView() {
             const c = data.data ?? data;
             setCustomer(c);
             setHealthForm({
-                allergy_list: c.health?.allergy_list ?? '',
+                medication_allergies: c.health?.medication_allergies ?? '',
+                other_allergies: c.health?.other_allergies ?? '',
                 medical_conditions: c.health?.medical_conditions ?? '',
                 notes: c.health?.notes ?? '',
             });
@@ -113,9 +120,10 @@ export default function CustomerView() {
         setHealthSaving(true);
         try {
             const { data } = await customersApi.saveHealth(id, {
-                allergy_list: healthForm.allergy_list || null,
-                medical_conditions: healthForm.medical_conditions || null,
-                notes: healthForm.notes || null,
+                medication_allergies: healthForm.medication_allergies.trim() || null,
+                other_allergies: healthForm.other_allergies.trim() || null,
+                medical_conditions: healthForm.medical_conditions.trim() || null,
+                notes: healthForm.notes.trim() || null,
             });
             toast.success('Health record saved.');
             setCustomer((prev) =>
@@ -124,7 +132,8 @@ export default function CustomerView() {
                           ...prev,
                           health: {
                               id: data.id,
-                              allergy_list: data.allergy_list,
+                              medication_allergies: data.medication_allergies,
+                              other_allergies: data.other_allergies,
                               medical_conditions: data.medical_conditions,
                               notes: data.notes,
                           },
@@ -210,17 +219,48 @@ export default function CustomerView() {
                 </CardContent>
             </Card>
 
-            {allergies.length > 0 ? (
-                <Alert variant="destructive" className="border-red-600/60 bg-red-950/35 text-red-50">
-                    <AlertTitle className="text-base font-semibold">Allergies on record</AlertTitle>
-                    <AlertDescription>
-                        <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-red-100">
-                            {allergies.map((a) => (
-                                <li key={a}>{a}</li>
-                            ))}
-                        </ul>
-                    </AlertDescription>
-                </Alert>
+            {!editingHealth ? (
+                <div className="space-y-3">
+                    {medicationAllergyTokens.length > 0 ? (
+                        <Alert variant="destructive" className="border-red-600/60 bg-red-950/35 text-red-50">
+                            <AlertTitle className="text-base font-semibold">
+                                Medication allergies — auto-checked on prescriptions
+                            </AlertTitle>
+                            <AlertDescription>
+                                <div className="mt-2 flex flex-wrap gap-1.5">
+                                    {medicationAllergyTokens.map((a) => (
+                                        <Badge key={a} variant="destructive" className="font-medium">
+                                            {a}
+                                        </Badge>
+                                    ))}
+                                </div>
+                            </AlertDescription>
+                        </Alert>
+                    ) : null}
+                    {otherAllergyTokens.length > 0 ? (
+                        <Alert className="border-amber-500/60 bg-amber-950/25 text-amber-50">
+                            <AlertTitle className="text-base font-semibold text-amber-100">
+                                Other allergies — for reference only
+                            </AlertTitle>
+                            <AlertDescription>
+                                <div className="mt-2 flex flex-wrap gap-1.5">
+                                    {otherAllergyTokens.map((a) => (
+                                        <Badge
+                                            key={a}
+                                            variant="outline"
+                                            className="border-amber-400/60 bg-amber-950/40 text-amber-50"
+                                        >
+                                            {a}
+                                        </Badge>
+                                    ))}
+                                </div>
+                            </AlertDescription>
+                        </Alert>
+                    ) : null}
+                    {!hasAnyAllergyText ? (
+                        <p className="text-sm text-muted-foreground">No known allergies recorded.</p>
+                    ) : null}
+                </div>
             ) : null}
 
             <Card>
@@ -240,10 +280,6 @@ export default function CustomerView() {
                     {!editingHealth ? (
                         <div className="space-y-3 text-sm">
                             <div>
-                                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Allergies</p>
-                                <p className="mt-1 whitespace-pre-wrap">{customer.health?.allergy_list?.trim() || '—'}</p>
-                            </div>
-                            <div>
                                 <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Conditions</p>
                                 <p className="mt-1 whitespace-pre-wrap">{customer.health?.medical_conditions?.trim() || '—'}</p>
                             </div>
@@ -253,16 +289,37 @@ export default function CustomerView() {
                             </div>
                         </div>
                     ) : (
-                        <form onSubmit={saveHealthRecord} className="space-y-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="allergy_list">Allergy list</Label>
-                                <Textarea
-                                    id="allergy_list"
-                                    rows={3}
-                                    value={healthForm.allergy_list}
-                                    onChange={(e) => setHealthForm((f) => ({ ...f, allergy_list: e.target.value }))}
-                                    placeholder="e.g. Penicillin; peanuts"
-                                />
+                        <form onSubmit={saveHealthRecord} className="space-y-6">
+                            <div className="space-y-3">
+                                <h3 className="text-sm font-semibold text-foreground">Allergy information</h3>
+                                <div className="space-y-2">
+                                    <Label htmlFor="medication_allergies">Medication allergies</Label>
+                                    <Textarea
+                                        id="medication_allergies"
+                                        rows={3}
+                                        value={healthForm.medication_allergies}
+                                        onChange={(e) =>
+                                            setHealthForm((f) => ({ ...f, medication_allergies: e.target.value }))
+                                        }
+                                        placeholder="e.g. Penicillin, NSAIDs, Codeine, Aspirin…"
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                        Used for automatic prescription safety checks.
+                                    </p>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="other_allergies">Other allergies</Label>
+                                    <Textarea
+                                        id="other_allergies"
+                                        rows={3}
+                                        value={healthForm.other_allergies}
+                                        onChange={(e) => setHealthForm((f) => ({ ...f, other_allergies: e.target.value }))}
+                                        placeholder="e.g. Peanuts, Latex, Contrast dye, Shellfish…"
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                        Displayed for reference only — not checked against prescriptions.
+                                    </p>
+                                </div>
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="medical_conditions">Medical conditions</Label>
@@ -293,7 +350,8 @@ export default function CustomerView() {
                                     onClick={() => {
                                         setEditingHealth(false);
                                         setHealthForm({
-                                            allergy_list: customer.health?.allergy_list ?? '',
+                                            medication_allergies: customer.health?.medication_allergies ?? '',
+                                            other_allergies: customer.health?.other_allergies ?? '',
                                             medical_conditions: customer.health?.medical_conditions ?? '',
                                             notes: customer.health?.notes ?? '',
                                         });

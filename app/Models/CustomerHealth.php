@@ -11,10 +11,16 @@ class CustomerHealth extends Model
 
     protected $fillable = [
         'customer_id',
-        'allergy_list',
+        'medication_allergies',
+        'other_allergies',
         'medical_conditions',
         'notes',
     ];
+
+    public function hasMedicationAllergies(): bool
+    {
+        return is_string($this->medication_allergies) && trim($this->medication_allergies) !== '';
+    }
 
     /**
      * @return BelongsTo<Customer, $this>

@@ -119,18 +119,21 @@ class CustomerApiTest extends TestCase
         $this->loginAs($user);
 
         $this->postJson("/api/customers/{$customer->id}/health", [
-            'allergy_list' => 'Penicillin',
+            'medication_allergies' => 'Penicillin',
+            'other_allergies' => null,
             'medical_conditions' => 'Asthma',
             'notes' => 'First',
         ])->assertOk()
-            ->assertJsonPath('allergy_list', 'Penicillin');
+            ->assertJsonPath('medication_allergies', 'Penicillin');
 
         $this->postJson("/api/customers/{$customer->id}/health", [
-            'allergy_list' => 'Penicillin, Peanuts',
+            'medication_allergies' => 'Penicillin, Codeine',
+            'other_allergies' => 'Peanuts',
             'medical_conditions' => 'Asthma',
             'notes' => 'Updated',
         ])->assertOk()
             ->assertJsonPath('notes', 'Updated')
-            ->assertJsonPath('allergy_list', 'Penicillin, Peanuts');
+            ->assertJsonPath('medication_allergies', 'Penicillin, Codeine')
+            ->assertJsonPath('other_allergies', 'Peanuts');
     }
 }
