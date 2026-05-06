@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { ClipboardPlus, Loader2, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import * as customersApi from '@/api/customers';
+import MedicationAllergyInput from '@/components/MedicationAllergyInput';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -293,18 +294,16 @@ export default function CustomerView() {
                             <div className="space-y-3">
                                 <h3 className="text-sm font-semibold text-foreground">Allergy information</h3>
                                 <div className="space-y-2">
-                                    <Label htmlFor="medication_allergies">Medication allergies</Label>
-                                    <Textarea
+                                    <Label>Medication allergies</Label>
+                                    <MedicationAllergyInput
                                         id="medication_allergies"
-                                        rows={3}
                                         value={healthForm.medication_allergies}
-                                        onChange={(e) =>
-                                            setHealthForm((f) => ({ ...f, medication_allergies: e.target.value }))
-                                        }
-                                        placeholder="e.g. Penicillin, NSAIDs, Codeine, Aspirin…"
+                                        onChange={(v) => setHealthForm((f) => ({ ...f, medication_allergies: v }))}
+                                        disabled={healthSaving}
                                     />
                                     <p className="text-xs text-muted-foreground">
-                                        Used for automatic prescription safety checks.
+                                        Used for automatic prescription safety checks. Pick stocked medicines or add
+                                        other drug / class names manually.
                                     </p>
                                 </div>
                                 <div className="space-y-2">
