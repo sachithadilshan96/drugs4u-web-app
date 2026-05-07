@@ -20,6 +20,9 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('customers/{customer}/health', [CustomerHealthController::class, 'upsert']);
     Route::apiResource('customers', CustomerController::class);
 
+    Route::get('prescriptions/pending-review', [PrescriptionController::class, 'pendingReview']);
+    Route::patch('prescriptions/{prescription}/review', [PrescriptionController::class, 'review'])
+        ->middleware('role.manager_or_admin');
     Route::patch('prescriptions/{prescription}/status', [PrescriptionController::class, 'updateStatus']);
     Route::apiResource('prescriptions', PrescriptionController::class)->only(['index', 'store', 'show', 'destroy']);
 

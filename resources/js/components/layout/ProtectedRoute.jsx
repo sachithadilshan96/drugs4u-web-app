@@ -6,20 +6,41 @@ import { useAuthStore } from '@/store/authStore';
 import { canAccessPath, requiredRoleForSoftRedirect } from '@/lib/routeAccess';
 import Forbidden from '@/pages/errors/Forbidden';
 
-export function ProtectedRoute() {
+/**
+ * Layout mode: no children — renders `<Outlet />` after auth + path rules.
+ * Wrap mode: pass `children` and optional `requiredRole` (string or string[]) for role-gated pages.
+ *
+ * @param {{ children?: import('react').ReactNode; requiredRole?: string | string[] }} [props]
+ */
+export function ProtectedRoute({ children, requiredRole: requiredRoleProp }) {
     const location = useLocation();
     const authReady = useAuthStore((s) => s.authReady);
     const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
     const user = useAuthStore((s) => s.user);
 
-    const requiredRole = useMemo(
+    const pathSoftRole = useMemo(
         () => requiredRoleForSoftRedirect(location.pathname),
         [location.pathname],
     );
 
+    const explicitRoles = useMemo(() => {
+        if (requiredRoleProp === undefined || requiredRoleProp === null) {
+            return null;
+        }
+        return Array.isArray(requiredRoleProp) ? requiredRoleProp : [requiredRoleProp];
+    }, [requiredRoleProp]);
+
     const deniedToastSent = useRef(false);
 
-    const roleDenied = Boolean(requiredRole && user?.role && user.role !== requiredRole);
+    const wrapMode = children != null;
+
+    const explicitRoleDenied = Boolean(
+        wrapMode && explicitRoles && explicitRoles.length > 0 && user?.role && !explicitRoles.includes(user.role),
+    );
+
+    const pathRoleDenied = Boolean(!wrapMode && pathSoftRole && user?.role && user.role !== pathSoftRole);
+
+    const roleDenied = explicitRoleDenied || pathRoleDenied;
 
     useLayoutEffect(() => {
         if (roleDenied) {
@@ -44,7 +65,17 @@ export function ProtectedRoute() {
         return <Navigate to="/login" replace state={{ from: location.pathname }} />;
     }
 
-    if (roleDenied) {
+    if (wrapMode) {
+        if (explicitRoleDenied) {
+            return <Forbidden />;
+        }
+        if (!canAccessPath(location.pathname, user?.role)) {
+            return <Forbidden />;
+        }
+        return children;
+    }
+
+    if (pathRoleDenied) {
         return <Navigate to="/dashboard" replace />;
     }
 

@@ -6,9 +6,11 @@ use App\Models\Customer;
 use App\Models\CustomerHealth;
 use App\Models\Inventory;
 use App\Models\Medicine;
+use App\Models\Prescription;
 use App\Models\User;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
@@ -143,7 +145,7 @@ class PrescriptionInventoryApiTest extends TestCase
         ])->assertCreated();
     }
 
-    public function test_dispensed_prescription_decrements_stock_and_returns_age_warnings(): void
+    public function test_dispensed_prescription_decrements_stock(): void
     {
         $user = User::factory()->create([
             'username' => 'pharm3',
@@ -165,7 +167,7 @@ class PrescriptionInventoryApiTest extends TestCase
         ]);
 
         $customer = Customer::factory()->create([
-            'dob' => now()->subYears(10)->toDateString(),
+            'dob' => now()->subYears(30)->toDateString(),
         ]);
 
         $res = $this->postJson('/api/prescriptions', [
@@ -177,10 +179,175 @@ class PrescriptionInventoryApiTest extends TestCase
         ])->assertCreated();
 
         $res->assertJsonPath('data.status', 'dispensed');
-        $this->assertNotEmpty($res->json('age_warnings'));
 
         $inv->refresh();
         $this->assertSame(18, (int) $inv->quantity);
+    }
+
+    public function test_age_restricted_minor_without_acknowledgement_returns_422(): void
+    {
+        $user = User::factory()->create([
+            'username' => 'pharm3b',
+            'password' => Hash::make('password'),
+            'role' => 'pharmacist',
+        ]);
+        $this->loginAs($user);
+
+        $medicine = Medicine::query()->create([
+            'name' => 'Minor Restricted Med',
+            'description' => 'Test',
+            'requires_age_check' => true,
+            'min_age' => 18,
+        ]);
+        Inventory::query()->create([
+            'medicine_id' => $medicine->id,
+            'quantity' => 20,
+            'expiry_date' => now()->addYear()->toDateString(),
+        ]);
+
+        $customer = Customer::factory()->create([
+            'dob' => now()->subYears(10)->toDateString(),
+        ]);
+
+        $this->postJson('/api/prescriptions', [
+            'customer_id' => $customer->id,
+            'status' => 'dispensed',
+            'items' => [
+                ['medicine_id' => $medicine->id, 'quantity' => 1],
+            ],
+        ])->assertStatus(422)->assertJsonPath('message', 'Age verification is required for one or more medicines before this prescription can be saved.');
+    }
+
+    public function test_acknowledged_age_restricted_minor_goes_to_pending_review(): void
+    {
+        $user = User::factory()->create([
+            'username' => 'pharm3c',
+            'password' => Hash::make('password'),
+            'role' => 'pharmacist',
+        ]);
+        $this->loginAs($user);
+
+        $medicine = Medicine::query()->create([
+            'name' => 'Minor Restricted Med 2',
+            'description' => 'Test',
+            'requires_age_check' => true,
+            'min_age' => 18,
+        ]);
+        $inv = Inventory::query()->create([
+            'medicine_id' => $medicine->id,
+            'quantity' => 20,
+            'expiry_date' => now()->addYear()->toDateString(),
+        ]);
+
+        $customer = Customer::factory()->create([
+            'dob' => now()->subYears(10)->toDateString(),
+        ]);
+
+        $res = $this->postJson('/api/prescriptions', [
+            'customer_id' => $customer->id,
+            'status' => 'dispensed',
+            'items' => [
+                ['medicine_id' => $medicine->id, 'quantity' => 2],
+            ],
+            'acknowledged_age_restricted_medicine_ids' => [$medicine->id],
+        ])->assertCreated();
+
+        $res->assertJsonPath('data.status', 'pending_review');
+        $this->assertNotEmpty($res->json('data.flagged_reason'));
+
+        $inv->refresh();
+        $this->assertSame(20, (int) $inv->quantity);
+    }
+
+    public function test_manager_can_approve_pending_review_and_decrement_stock(): void
+    {
+        $pharmacist = User::factory()->create([
+            'username' => 'pharm3d',
+            'password' => Hash::make('password'),
+            'role' => 'pharmacist',
+        ]);
+        $manager = User::factory()->create([
+            'username' => 'mgr1',
+            'password' => Hash::make('password'),
+            'role' => 'manager',
+        ]);
+
+        $medicine = Medicine::query()->create([
+            'name' => 'Review Med',
+            'description' => 'Test',
+            'requires_age_check' => true,
+            'min_age' => 18,
+        ]);
+        $inv = Inventory::query()->create([
+            'medicine_id' => $medicine->id,
+            'quantity' => 20,
+            'expiry_date' => now()->addYear()->toDateString(),
+        ]);
+
+        $customer = Customer::factory()->create([
+            'dob' => now()->subYears(10)->toDateString(),
+        ]);
+
+        $this->loginAs($pharmacist);
+        $create = $this->postJson('/api/prescriptions', [
+            'customer_id' => $customer->id,
+            'status' => 'dispensed',
+            'items' => [
+                ['medicine_id' => $medicine->id, 'quantity' => 3],
+            ],
+            'acknowledged_age_restricted_medicine_ids' => [$medicine->id],
+        ])->assertCreated();
+
+        $rxId = (int) $create->json('data.id');
+
+        $this->postJson('/api/logout')->assertOk();
+        Auth::forgetGuards();
+        $this->loginAs($manager);
+        $this->patchJson("/api/prescriptions/{$rxId}/review", [
+            'decision' => 'approve',
+            'notes' => 'Verified in person.',
+        ])->assertOk()->assertJsonPath('data.status', 'dispensed');
+
+        $inv->refresh();
+        $this->assertSame(17, (int) $inv->quantity);
+    }
+
+    public function test_pharmacist_cannot_review_prescription(): void
+    {
+        $pharmacist = User::factory()->create([
+            'username' => 'pharm3e',
+            'password' => Hash::make('password'),
+            'role' => 'pharmacist',
+        ]);
+        $medicine = Medicine::query()->create([
+            'name' => 'No Review Med',
+            'description' => 'Test',
+            'requires_age_check' => false,
+            'min_age' => 18,
+        ]);
+        Inventory::query()->create([
+            'medicine_id' => $medicine->id,
+            'quantity' => 20,
+            'expiry_date' => now()->addYear()->toDateString(),
+        ]);
+        $customer = Customer::factory()->create();
+
+        $this->loginAs($pharmacist);
+        $create = $this->postJson('/api/prescriptions', [
+            'customer_id' => $customer->id,
+            'status' => 'pending',
+            'items' => [
+                ['medicine_id' => $medicine->id, 'quantity' => 1],
+            ],
+        ])->assertCreated();
+
+        $rxId = (int) $create->json('data.id');
+
+        Prescription::query()->whereKey($rxId)->update(['status' => 'pending_review']);
+
+        $this->patchJson("/api/prescriptions/{$rxId}/review", [
+            'decision' => 'approve',
+        ])->assertForbidden();
     }
 
     public function test_inventory_dispense_insufficient_returns_422(): void
