@@ -244,23 +244,18 @@ export default function PrescriptionList() {
                                                         {statusLabel(r.status)}
                                                     </Badge>
                                                 </TableCell>
-                                                <TableCell className="text-right">
+                                                <TableCell
+                                                    className="text-right"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    onKeyDown={(e) => e.stopPropagation()}
+                                                >
                                                     {pharmacistAwaiting ? (
                                                         <span className="text-xs text-muted-foreground">
                                                             Awaiting manager approval
                                                         </span>
                                                     ) : (
-                                                        <Button
-                                                            type="button"
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            className="text-teal-600 hover:text-teal-500"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                navigate(`/prescriptions/${r.id}`);
-                                                            }}
-                                                        >
-                                                            View
+                                                        <Button asChild type="button" variant="ghost" size="sm" className="text-teal-600 hover:text-teal-500">
+                                                            <Link to={`/prescriptions/${r.id}`}>View</Link>
                                                         </Button>
                                                     )}
                                                 </TableCell>
