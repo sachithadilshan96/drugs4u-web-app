@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AlertLog;
 use App\Models\Customer;
 use App\Models\Inventory;
 use App\Models\MedicationHistory;
@@ -46,6 +47,9 @@ class PrescriptionController extends Controller
         $paginator = $query->paginate(15)->withQueryString();
 
         $paginator->getCollection()->transform(function (Prescription $p) {
+            $reason = $p->flagged_reason;
+            $reasonShort = is_string($reason) && $reason !== '' ? mb_substr($reason, 0, 40) : null;
+
             return [
                 'id' => $p->id,
                 'customer_id' => $p->customer_id,
@@ -54,6 +58,9 @@ class PrescriptionController extends Controller
                 'pharmacist_name' => $p->pharmacist?->name,
                 'status' => $p->status,
                 'notes' => $p->notes,
+                'flagged_reason' => $p->flagged_reason,
+                'flagged_reason_short' => $reasonShort,
+                'flagged_reason_truncated' => is_string($reason) && mb_strlen($reason) > 40,
                 'items_count' => (int) ($p->items_count ?? 0),
                 'created_at' => $p->created_at?->toIso8601String(),
                 'updated_at' => $p->updated_at?->toIso8601String(),
@@ -72,9 +79,14 @@ class PrescriptionController extends Controller
             'items' => ['required', 'array', 'min:1'],
             'items.*.medicine_id' => ['required', 'integer', 'exists:medicines,id'],
             'items.*.quantity' => ['required', 'integer', 'min:1', 'max:9999'],
+            'acknowledged_allergy_overrides' => ['nullable', 'array'],
+            'acknowledged_allergy_overrides.*.medicine_id' => ['required', 'integer', 'exists:medicines,id'],
+            'acknowledged_allergy_overrides.*.matched_allergen' => ['required', 'string', 'max:255'],
+            'acknowledged_age_restricted_medicine_ids' => ['nullable', 'array'],
+            'acknowledged_age_restricted_medicine_ids.*' => ['integer', 'exists:medicines,id'],
         ]);
 
-        $status = $validated['status'] ?? 'pending';
+        $requestedStatus = $validated['status'] ?? 'pending';
 
         $customer = Customer::query()
             ->with('customerHealth')
@@ -84,21 +96,64 @@ class PrescriptionController extends Controller
         $medicines = Medicine::query()->whereIn('id', $medicineIds)->get()->keyBy('id');
 
         $allergyConflicts = $this->detectAllergyConflicts($customer, $validated['items'], $medicines);
-        if ($allergyConflicts !== []) {
+        $overrideRows = collect($validated['acknowledged_allergy_overrides'] ?? []);
+        $unresolvedAllergies = [];
+        foreach ($allergyConflicts as $c) {
+            $matched = $overrideRows->contains(function (array $o) use ($c) {
+                return (int) $o['medicine_id'] === (int) $c['medicine_id']
+                    && mb_strtolower(trim($o['matched_allergen'])) === mb_strtolower(trim($c['matched_allergen']));
+            });
+            if (! $matched) {
+                $unresolvedAllergies[] = $c;
+            }
+        }
+        if ($unresolvedAllergies !== []) {
             return response()->json([
                 'message' => 'Potential allergy conflict for one or more medicines.',
-                'conflicts' => $allergyConflicts,
+                'conflicts' => $unresolvedAllergies,
             ], 422);
         }
 
         $ageWarnings = $this->collectAgeRestrictionWarnings($customer, $validated['items'], $medicines);
+        $ageAckIds = collect($validated['acknowledged_age_restricted_medicine_ids'] ?? [])->map(fn ($id) => (int) $id)->unique();
+        $blockingAge = [];
+        foreach ($ageWarnings as $w) {
+            if (! $ageAckIds->contains((int) $w['medicine_id'])) {
+                $blockingAge[] = $w;
+            }
+        }
+        if ($blockingAge !== []) {
+            return response()->json([
+                'message' => 'Age verification is required for one or more medicines before this prescription can be saved.',
+                'age_required' => $blockingAge,
+            ], 422);
+        }
 
-        $prescription = DB::transaction(function () use ($request, $validated, $status) {
+        $flagReasons = [];
+        foreach ($allergyConflicts as $c) {
+            $flagReasons[] = 'Allergy override: '.$c['medicine_name'].' vs '.$c['matched_allergen'];
+        }
+        foreach ($ageWarnings as $w) {
+            $flagReasons[] = 'Age-restricted medicine: '.$w['medicine_name'].' (ID verification recorded by pharmacist)';
+        }
+
+        $isFlagged = $flagReasons !== [];
+        $status = $isFlagged ? 'pending_review' : ($requestedStatus === 'dispensed' ? 'dispensed' : 'pending');
+        if ($isFlagged && $requestedStatus === 'dispensed') {
+            $status = 'pending_review';
+        }
+
+        $flaggedAt = $isFlagged ? now() : null;
+        $flaggedReason = $isFlagged ? implode('; ', $flagReasons) : null;
+
+        $prescription = DB::transaction(function () use ($request, $validated, $status, $flaggedReason, $flaggedAt) {
             $rx = Prescription::query()->create([
                 'customer_id' => $validated['customer_id'],
                 'pharmacist_id' => $request->user()->id,
                 'status' => $status,
                 'notes' => $validated['notes'] ?? null,
+                'flagged_reason' => $flaggedReason,
+                'flagged_at' => $flaggedAt,
             ]);
 
             foreach ($validated['items'] as $row) {
@@ -126,9 +181,76 @@ class PrescriptionController extends Controller
 
     public function show(Prescription $prescription): JsonResponse
     {
-        $prescription->load(['items.medicine', 'customer', 'pharmacist']);
+        $prescription->load(['items.medicine', 'customer', 'pharmacist', 'reviewer']);
 
         return response()->json(['data' => $this->serializePrescriptionDetail($prescription)]);
+    }
+
+    public function pendingReview(): JsonResponse
+    {
+        $rows = Prescription::query()
+            ->where('status', 'pending_review')
+            ->with(['customer', 'pharmacist', 'items.medicine'])
+            ->orderBy('flagged_at')
+            ->orderByDesc('created_at')
+            ->get();
+
+        return response()->json([
+            'data' => $rows->map(fn (Prescription $p) => $this->serializePrescriptionDetail($p))->values()->all(),
+        ]);
+    }
+
+    public function review(Request $request, Prescription $prescription): JsonResponse
+    {
+        $validated = $request->validate([
+            'decision' => ['required', Rule::in(['approve', 'reject'])],
+            'notes' => ['nullable', 'string', 'max:5000'],
+        ]);
+
+        if ($prescription->status !== 'pending_review') {
+            return response()->json(['message' => 'This prescription is not awaiting manager review.'], 422);
+        }
+
+        $user = $request->user();
+        $managerNote = isset($validated['notes']) ? trim((string) $validated['notes']) : '';
+
+        if ($validated['decision'] === 'approve') {
+            DB::transaction(function () use ($prescription, $user, $managerNote) {
+                $prescription->load('items');
+                $this->fulfillDispensedPrescription($prescription);
+                $baseNotes = $prescription->notes !== null ? trim((string) $prescription->notes) : '';
+                $append = $managerNote !== '' ? "\n\n[Manager approval — {$user->name}]: ".$managerNote : '';
+                $prescription->update([
+                    'status' => 'dispensed',
+                    'reviewed_by' => $user->id,
+                    'reviewed_at' => now(),
+                    'notes' => $baseNotes.$append,
+                ]);
+            });
+
+            AlertLog::query()->create([
+                'alert_type' => 'prescription_review',
+                'reference_id' => $prescription->id,
+                'message' => 'Prescription #'.$prescription->id.' approved by manager '.$user->name,
+                'dismissed' => false,
+            ]);
+
+            $fresh = $prescription->fresh(['items.medicine', 'customer', 'pharmacist', 'reviewer']);
+
+            return response()->json(['data' => $this->serializePrescriptionDetail($fresh)]);
+        }
+
+        $rejectBlock = '[Manager rejection — '.$user->name.']: '.($managerNote !== '' ? $managerNote : 'No reason supplied.');
+        $prescription->update([
+            'status' => 'rejected',
+            'reviewed_by' => $user->id,
+            'reviewed_at' => now(),
+            'notes' => trim(trim((string) $prescription->notes)."\n\n".$rejectBlock),
+        ]);
+
+        return response()->json([
+            'data' => $this->serializePrescriptionDetail($prescription->fresh(['items.medicine', 'customer', 'pharmacist', 'reviewer'])),
+        ]);
     }
 
     public function updateStatus(Request $request, Prescription $prescription): JsonResponse
@@ -350,6 +472,8 @@ class PrescriptionController extends Controller
             'customer' => $p->relationLoaded('customer') && $p->customer ? [
                 'id' => $p->customer->id,
                 'full_name' => $p->customer->full_name,
+                'dob' => $p->customer->dob?->format('Y-m-d'),
+                'age' => $p->customer->age,
             ] : null,
             'pharmacist_id' => $p->pharmacist_id,
             'pharmacist' => $p->relationLoaded('pharmacist') && $p->pharmacist ? [
@@ -358,6 +482,14 @@ class PrescriptionController extends Controller
             ] : null,
             'status' => $p->status,
             'notes' => $p->notes,
+            'flagged_reason' => $p->flagged_reason,
+            'flagged_at' => $p->flagged_at?->toIso8601String(),
+            'reviewed_by' => $p->reviewed_by,
+            'reviewed_at' => $p->reviewed_at?->toIso8601String(),
+            'reviewer' => $p->relationLoaded('reviewer') && $p->reviewer ? [
+                'id' => $p->reviewer->id,
+                'name' => $p->reviewer->name,
+            ] : null,
             'items' => $p->relationLoaded('items')
                 ? $p->items->map(fn (PrescriptionItem $i) => [
                     'id' => $i->id,
