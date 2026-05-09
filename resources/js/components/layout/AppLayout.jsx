@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { LogOut, Menu, Pill } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { pageTitleForPath } from '@/lib/routeAccess';
 import * as prescriptionsApi from '@/api/prescriptions';
+import * as inventoryApi from '@/api/inventory';
+import * as alertsApi from '@/api/alerts';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -122,6 +124,8 @@ export function AppLayout() {
     const logout = useAuthStore((s) => s.logout);
     const [mobileOpen, setMobileOpen] = useState(false);
     const [pendingReviewCount, setPendingReviewCount] = useState(0);
+    const [lowStockRows, setLowStockRows] = useState([]);
+    const [stockBannerDismissed, setStockBannerDismissed] = useState(false);
 
     const role = user?.role;
     const title = pageTitleForPath(location.pathname);
@@ -152,6 +156,39 @@ export function AppLayout() {
         }, 120_000);
         return () => window.clearInterval(id);
     }, [role, loadPendingReviewCount]);
+
+    const loadLowStock = useCallback(async () => {
+        try {
+            const { data } = await inventoryApi.getLowStockInventory();
+            setLowStockRows(Array.isArray(data.data) ? data.data : []);
+            setStockBannerDismissed(false);
+        } catch {
+            setLowStockRows([]);
+        }
+    }, []);
+
+    useEffect(() => {
+        void loadLowStock();
+    }, [loadLowStock]);
+
+    useEffect(() => {
+        const id = window.setInterval(() => {
+            void loadLowStock();
+        }, 300_000);
+        return () => window.clearInterval(id);
+    }, [loadLowStock]);
+
+    const dismissLowStockBanner = useCallback(async () => {
+        const ids = [...new Set(lowStockRows.map((x) => x.alert_id).filter((id) => Number.isFinite(id)))];
+        if (ids.length > 0) {
+            try {
+                await Promise.all(ids.map((id) => alertsApi.dismissAlert(id)));
+            } catch {
+                // Keep UX resilient even if some dismiss requests fail.
+            }
+        }
+        setStockBannerDismissed(true);
+    }, [lowStockRows]);
 
     return (
         <div className="flex min-h-dvh bg-background">
@@ -217,6 +254,37 @@ export function AppLayout() {
             </Dialog>
 
             <div className="flex min-h-dvh flex-1 flex-col md:pl-[240px]">
+                {!stockBannerDismissed && lowStockRows.length > 0 ? (
+                    <div className="border-b border-amber-300/40 bg-amber-100/70 px-4 py-2 text-sm text-amber-900 dark:border-amber-700/50 dark:bg-amber-950/35 dark:text-amber-100 md:px-6">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-medium">
+                                Low stock alert:
+                            </span>
+                            <span className="flex flex-wrap items-center gap-1">
+                                {lowStockRows.map((row, idx) => (
+                                    <span key={`${row.id}-${idx}`}>
+                                        <Link className="underline underline-offset-2 hover:opacity-80" to="/inventory">
+                                            {row.medicine_name}
+                                        </Link>
+                                        {' '}
+                                        ({row.quantity} units)
+                                        {idx < lowStockRows.length - 1 ? ', ' : ''}
+                                    </span>
+                                ))}
+                            </span>
+                            <span>— reorder required</span>
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="ml-auto h-7 border-amber-500/50 bg-transparent text-amber-900 hover:bg-amber-200/60 dark:text-amber-100 dark:hover:bg-amber-900/50"
+                                onClick={dismissLowStockBanner}
+                            >
+                                Dismiss
+                            </Button>
+                        </div>
+                    </div>
+                ) : null}
                 <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b border-border bg-background/95 px-4 backdrop-blur supports-backdrop-filter:bg-background/80 md:px-6">
                     <Button
                         type="button"
