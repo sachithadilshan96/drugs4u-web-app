@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\AgeVerificationController;
 use App\Http\Controllers\Api\AlertController;
 use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\CustomerHealthController;
@@ -31,7 +32,12 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::apiResource('inventory', InventoryController::class);
     Route::post('alerts/{alert}/dismiss', [AlertController::class, 'dismiss']);
 
-    Route::get('medicines', [MedicineController::class, 'index']);
+    Route::post('age-verifications', [AgeVerificationController::class, 'store']);
+    Route::patch('age-verifications/link-prescription', [AgeVerificationController::class, 'updatePrescription']);
+    Route::get('age-verifications', [AgeVerificationController::class, 'index'])
+        ->middleware('role.manager_or_admin');
+
+    Route::apiResource('medicines', MedicineController::class)->only(['index', 'store', 'show', 'update']);
 
     Route::middleware('role.admin')->group(function (): void {
         Route::apiResource('users', UserController::class)->only(['index', 'store', 'destroy']);

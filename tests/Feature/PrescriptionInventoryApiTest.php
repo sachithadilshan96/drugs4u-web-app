@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\AgeVerificationLog;
 use App\Models\Customer;
 use App\Models\CustomerHealth;
 use App\Models\Inventory;
@@ -215,7 +216,7 @@ class PrescriptionInventoryApiTest extends TestCase
             'items' => [
                 ['medicine_id' => $medicine->id, 'quantity' => 1],
             ],
-        ])->assertStatus(422)->assertJsonPath('message', 'Age verification is required for one or more medicines before this prescription can be saved.');
+        ])->assertStatus(422)->assertJsonPath('message', 'Age verification required');
     }
 
     public function test_acknowledged_age_restricted_minor_goes_to_pending_review(): void
@@ -243,13 +244,24 @@ class PrescriptionInventoryApiTest extends TestCase
             'dob' => now()->subYears(10)->toDateString(),
         ]);
 
+        AgeVerificationLog::query()->create([
+            'prescription_id' => null,
+            'medicine_id' => $medicine->id,
+            'customer_id' => $customer->id,
+            'pharmacist_id' => $user->id,
+            'customer_age' => 10,
+            'min_age_required' => 18,
+            'id_type_presented' => 'Passport',
+            'outcome' => 'verified',
+            'pharmacist_notes' => null,
+        ]);
+
         $res = $this->postJson('/api/prescriptions', [
             'customer_id' => $customer->id,
             'status' => 'dispensed',
             'items' => [
                 ['medicine_id' => $medicine->id, 'quantity' => 2],
             ],
-            'acknowledged_age_restricted_medicine_ids' => [$medicine->id],
         ])->assertCreated();
 
         $res->assertJsonPath('data.status', 'pending_review');
@@ -289,13 +301,23 @@ class PrescriptionInventoryApiTest extends TestCase
         ]);
 
         $this->loginAs($pharmacist);
+        AgeVerificationLog::query()->create([
+            'prescription_id' => null,
+            'medicine_id' => $medicine->id,
+            'customer_id' => $customer->id,
+            'pharmacist_id' => $pharmacist->id,
+            'customer_age' => 10,
+            'min_age_required' => 18,
+            'id_type_presented' => 'Passport',
+            'outcome' => 'verified',
+            'pharmacist_notes' => null,
+        ]);
         $create = $this->postJson('/api/prescriptions', [
             'customer_id' => $customer->id,
             'status' => 'dispensed',
             'items' => [
                 ['medicine_id' => $medicine->id, 'quantity' => 3],
             ],
-            'acknowledged_age_restricted_medicine_ids' => [$medicine->id],
         ])->assertCreated();
 
         $rxId = (int) $create->json('data.id');

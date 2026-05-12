@@ -28,6 +28,13 @@ const NAV_ITEMS = [
         indent: true,
         badgeKey: 'pending_review',
     },
+    { to: '/medicines', label: 'Medicines', roles: ['pharmacist', 'manager', 'admin'] },
+    {
+        to: '/medicines/new',
+        label: 'Add medicine',
+        roles: ['admin'],
+        indent: true,
+    },
     { to: '/inventory', label: 'Inventory', roles: ['pharmacist', 'manager', 'admin'] },
     { to: '/reports', label: 'Reports', roles: ['manager', 'admin'] },
     { to: '/alerts', label: 'Alerts log', roles: ['admin'] },

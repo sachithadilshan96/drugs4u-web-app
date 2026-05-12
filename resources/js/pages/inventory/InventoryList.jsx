@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import * as inventoryApi from '@/api/inventory';
@@ -6,7 +7,7 @@ import * as medicinesApi from '@/api/medicines';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -55,6 +56,11 @@ function statusForRow(row) {
 }
 
 export default function InventoryList() {
+    const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const addStockFromQuery = searchParams.get('addStock');
+    const medicineIdFromQuery = searchParams.get('medicineId');
+
     const [loading, setLoading] = useState(true);
     const [rows, setRows] = useState([]);
     const [search, setSearch] = useState('');
@@ -92,9 +98,9 @@ export default function InventoryList() {
         void load();
     }, [load]);
 
-    const loadMedicines = useCallback(async () => {
+    const loadMedicinesForPicker = useCallback(async () => {
         try {
-            const { data } = await medicinesApi.listMedicinesFromInventory();
+            const { data } = await medicinesApi.listMedicinesForInventoryPicker();
             setMedicineOptions(data.data ?? []);
         } catch {
             setMedicineOptions([]);
@@ -144,13 +150,33 @@ export default function InventoryList() {
         }
     }, [load, stockTarget, updateQty, updateType]);
 
-    const openAddDialog = useCallback(async () => {
-        await loadMedicines();
-        setNewMedicineId('');
-        setNewQty('1');
-        setNewExpiry('');
-        setAddDialogOpen(true);
-    }, [loadMedicines]);
+    const openAddInventoryDialog = useCallback(
+        async (preselectMedicineId) => {
+            await loadMedicinesForPicker();
+            setNewMedicineId(preselectMedicineId != null && preselectMedicineId !== '' ? String(preselectMedicineId) : '');
+            setNewQty('1');
+            setNewExpiry('');
+            setAddDialogOpen(true);
+        },
+        [loadMedicinesForPicker],
+    );
+
+    useEffect(() => {
+        if (addStockFromQuery !== '1') {
+            return undefined;
+        }
+        let cancelled = false;
+        (async () => {
+            await openAddInventoryDialog(medicineIdFromQuery ?? undefined);
+            if (cancelled) {
+                return;
+            }
+            navigate('/inventory', { replace: true });
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [addStockFromQuery, medicineIdFromQuery, navigate, openAddInventoryDialog]);
 
     const submitNewInventory = useCallback(async () => {
         const medId = Number.parseInt(newMedicineId, 10);
@@ -167,7 +193,7 @@ export default function InventoryList() {
                 quantity: qty,
                 expiry_date: newExpiry,
             });
-            toast.success('New medicine stock added.');
+            toast.success('Inventory updated — new batch added.');
             setAddDialogOpen(false);
             await load();
         } catch (e) {
@@ -184,9 +210,13 @@ export default function InventoryList() {
                     <h1 className="text-2xl font-semibold tracking-tight">Inventory</h1>
                     <p className="mt-1 text-sm text-muted-foreground">Stock levels, expiry dates, and low-stock alerts.</p>
                 </div>
-                <Button type="button" className="gap-2 bg-teal-600 text-white hover:bg-teal-500" onClick={openAddDialog}>
+                <Button
+                    type="button"
+                    className="gap-2 bg-teal-600 text-white hover:bg-teal-500"
+                    onClick={() => void openAddInventoryDialog()}
+                >
                     <Plus className="size-4" />
-                    Add New Medicine
+                    Update inventory
                 </Button>
             </div>
 
@@ -319,7 +349,10 @@ export default function InventoryList() {
             <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>Add New Medicine</DialogTitle>
+                        <DialogTitle>Update inventory</DialogTitle>
+                        <DialogDescription>
+                            Add a new stock batch: choose a medicine from the catalogue, quantity received, and expiry date.
+                        </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4">
                         <div className="space-y-2">
@@ -350,7 +383,7 @@ export default function InventoryList() {
                             Cancel
                         </Button>
                         <Button type="button" className="bg-teal-600 text-white hover:bg-teal-500" disabled={creating} onClick={submitNewInventory}>
-                            {creating ? 'Saving…' : 'Add Medicine'}
+                            {creating ? 'Saving…' : 'Save batch'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

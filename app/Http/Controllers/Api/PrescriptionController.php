@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AgeVerificationLog;
 use App\Models\AlertLog;
 use App\Models\Customer;
 use App\Models\Inventory;
@@ -82,8 +83,6 @@ class PrescriptionController extends Controller
             'acknowledged_allergy_overrides' => ['nullable', 'array'],
             'acknowledged_allergy_overrides.*.medicine_id' => ['required', 'integer', 'exists:medicines,id'],
             'acknowledged_allergy_overrides.*.matched_allergen' => ['required', 'string', 'max:255'],
-            'acknowledged_age_restricted_medicine_ids' => ['nullable', 'array'],
-            'acknowledged_age_restricted_medicine_ids.*' => ['integer', 'exists:medicines,id'],
         ]);
 
         $requestedStatus = $validated['status'] ?? 'pending';
@@ -115,18 +114,29 @@ class PrescriptionController extends Controller
         }
 
         $ageWarnings = $this->collectAgeRestrictionWarnings($customer, $validated['items'], $medicines);
-        $ageAckIds = collect($validated['acknowledged_age_restricted_medicine_ids'] ?? [])->map(fn ($id) => (int) $id)->unique();
-        $blockingAge = [];
+        $since = Carbon::now()->subMinutes(30);
+        $pharmacistId = (int) $request->user()->id;
         foreach ($ageWarnings as $w) {
-            if (! $ageAckIds->contains((int) $w['medicine_id'])) {
-                $blockingAge[] = $w;
+            $outcome = $this->latestAgeVerificationOutcome(
+                (int) $customer->id,
+                (int) $w['medicine_id'],
+                $pharmacistId,
+                $since
+            );
+            if ($outcome === 'rejected') {
+                return response()->json([
+                    'message' => 'Age verification was rejected for this medicine',
+                    'medicine' => $w['medicine_name'],
+                ], 422);
             }
-        }
-        if ($blockingAge !== []) {
-            return response()->json([
-                'message' => 'Age verification is required for one or more medicines before this prescription can be saved.',
-                'age_required' => $blockingAge,
-            ], 422);
+            if (! in_array($outcome, ['verified', 'exempted'], true)) {
+                return response()->json([
+                    'message' => 'Age verification required',
+                    'medicine' => $w['medicine_name'],
+                    'min_age' => $w['min_age'],
+                    'customer_age' => $w['customer_age'],
+                ], 422);
+            }
         }
 
         $flagReasons = [];
@@ -287,6 +297,31 @@ class PrescriptionController extends Controller
             $medicinesForWarnings
         );
 
+        $since = Carbon::now()->subMinutes(30);
+        $pharmacistId = (int) $request->user()->id;
+        foreach ($ageWarnings as $w) {
+            $outcome = $this->latestAgeVerificationOutcome(
+                (int) $customerForWarnings->id,
+                (int) $w['medicine_id'],
+                $pharmacistId,
+                $since
+            );
+            if ($outcome === 'rejected') {
+                return response()->json([
+                    'message' => 'Age verification was rejected for this medicine',
+                    'medicine' => $w['medicine_name'],
+                ], 422);
+            }
+            if (! in_array($outcome, ['verified', 'exempted'], true)) {
+                return response()->json([
+                    'message' => 'Age verification required',
+                    'medicine' => $w['medicine_name'],
+                    'min_age' => $w['min_age'],
+                    'customer_age' => $w['customer_age'],
+                ], 422);
+            }
+        }
+
         DB::transaction(function () use ($prescription) {
             $prescription->load('items');
             $this->fulfillDispensedPrescription($prescription);
@@ -378,7 +413,7 @@ class PrescriptionController extends Controller
             if (! $med->requires_age_check) {
                 continue;
             }
-            $min = (int) ($med->min_age ?? 18);
+            $min = $med->min_age !== null ? (int) $med->min_age : 18;
             if ($age < $min) {
                 $warnings[] = [
                     'medicine_id' => $med->id,
@@ -391,6 +426,17 @@ class PrescriptionController extends Controller
         }
 
         return $warnings;
+    }
+
+    private function latestAgeVerificationOutcome(int $customerId, int $medicineId, int $pharmacistId, Carbon $since): ?string
+    {
+        return AgeVerificationLog::query()
+            ->where('customer_id', $customerId)
+            ->where('medicine_id', $medicineId)
+            ->where('pharmacist_id', $pharmacistId)
+            ->where('created_at', '>=', $since)
+            ->orderByDesc('id')
+            ->value('outcome');
     }
 
     private function fulfillDispensedPrescription(Prescription $prescription): void

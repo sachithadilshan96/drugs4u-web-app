@@ -62,6 +62,9 @@ export function isAgeRestrictedIssue(age, medicineMeta) {
     if (!medicineMeta?.requires_age_check) {
         return false;
     }
-    const min = typeof medicineMeta.min_age === 'number' ? medicineMeta.min_age : 18;
+    const min =
+        typeof medicineMeta.min_age === 'number' && medicineMeta.min_age !== null
+            ? medicineMeta.min_age
+            : 18;
     return age < min;
 }

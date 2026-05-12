@@ -51,7 +51,7 @@ class MedicineApiTest extends TestCase
         $this->getJson('/api/medicines')->assertStatus(401);
     }
 
-    public function test_authenticated_user_lists_medicines_with_inventory_only(): void
+    public function test_authenticated_user_can_filter_medicines_by_search(): void
     {
         $user = User::factory()->create([
             'username' => 'med1',
@@ -79,9 +79,34 @@ class MedicineApiTest extends TestCase
             'min_age' => 18,
         ]);
 
-        $this->getJson('/api/medicines')
+               $this->getJson('/api/medicines?search=Stocked')
             ->assertOk()
             ->assertJsonPath('data.0.name', 'Stocked Med')
             ->assertJsonCount(1, 'data');
+    }
+
+    public function test_picker_catalog_includes_medicines_without_inventory_rows(): void
+    {
+        $user = User::factory()->create([
+            'username' => 'med2',
+            'password' => Hash::make('password'),
+            'role' => 'pharmacist',
+        ]);
+        $this->loginAs($user);
+
+        $noStock = Medicine::query()->create([
+            'name' => 'Catalogue Only Med',
+            'description' => 'x',
+            'requires_age_check' => false,
+            'min_age' => null,
+        ]);
+
+        $this->getJson('/api/medicines?picker=1&catalog=1')
+            ->assertOk()
+            ->assertJsonFragment(['id' => $noStock->id, 'name' => 'Catalogue Only Med']);
+
+        $pickerOnly = $this->getJson('/api/medicines?picker=1')->assertOk()->json('data');
+        $ids = collect($pickerOnly)->pluck('id')->all();
+        $this->assertNotContains($noStock->id, $ids);
     }
 }
