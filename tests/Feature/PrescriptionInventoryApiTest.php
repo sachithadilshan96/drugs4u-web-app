@@ -398,4 +398,42 @@ class PrescriptionInventoryApiTest extends TestCase
             'quantity' => 5,
         ])->assertStatus(422);
     }
+
+    public function test_inventory_dispense_uses_fefo_across_batches_for_same_medicine(): void
+    {
+        $user = User::factory()->create([
+            'username' => 'pharm_fefo',
+            'password' => Hash::make('password'),
+            'role' => 'pharmacist',
+        ]);
+        $this->loginAs($user);
+
+        $medicine = Medicine::query()->create([
+            'name' => 'FEFO Med',
+            'description' => 'Test',
+            'requires_age_check' => false,
+            'min_age' => null,
+        ]);
+
+        $earlierExpiry = Inventory::query()->create([
+            'medicine_id' => $medicine->id,
+            'quantity' => 3,
+            'expiry_date' => now()->addMonths(6)->toDateString(),
+        ]);
+        $laterExpiry = Inventory::query()->create([
+            'medicine_id' => $medicine->id,
+            'quantity' => 10,
+            'expiry_date' => now()->addYears(2)->toDateString(),
+        ]);
+
+        $this->patchJson("/api/inventory/{$laterExpiry->id}", [
+            'type' => 'dispense',
+            'quantity' => 5,
+        ])->assertOk();
+
+        $earlierExpiry->refresh();
+        $laterExpiry->refresh();
+        $this->assertSame(0, (int) $earlierExpiry->quantity);
+        $this->assertSame(8, (int) $laterExpiry->quantity);
+    }
 }

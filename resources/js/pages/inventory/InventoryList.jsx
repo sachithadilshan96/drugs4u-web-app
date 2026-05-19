@@ -27,6 +27,15 @@ function formatDate(iso) {
     }
 }
 
+/** Sum of non-expired quantity for this medicine across all batches (from API). */
+function nonExpiredTotalForRow(row) {
+    const t = row?.medicine_non_expired_total;
+    if (t != null && Number.isFinite(Number(t))) {
+        return Number(t);
+    }
+    return Number(row?.quantity ?? 0);
+}
+
 function statusForRow(row) {
     const qty = Number(row.quantity ?? 0);
     const expIso = row.expiry_date;
@@ -119,7 +128,7 @@ export default function InventoryList() {
             return false;
         }
         const requested = Number.parseInt(updateQty, 10) || 0;
-        return requested > Number(stockTarget.quantity ?? 0);
+        return requested > nonExpiredTotalForRow(stockTarget);
     }, [stockTarget, updateQty, updateType]);
 
     const submitStockUpdate = useCallback(async () => {
@@ -131,15 +140,19 @@ export default function InventoryList() {
             toast.error('Enter a valid quantity.');
             return;
         }
-        if (updateType === 'dispense' && qty > Number(stockTarget.quantity ?? 0)) {
-            toast.error('Requested dispense quantity exceeds current stock.');
+        if (updateType === 'dispense' && qty > nonExpiredTotalForRow(stockTarget)) {
+            toast.error('Requested dispense quantity exceeds total non-expired stock for this medicine.');
             return;
         }
 
         setUpdating(true);
         try {
             await inventoryApi.updateInventoryStock(stockTarget.id, updateType, qty);
-            toast.success(updateType === 'dispense' ? 'Stock dispensed.' : 'Stock received.');
+            toast.success(
+                updateType === 'dispense'
+                    ? 'Stock dispensed (earliest-expiry batches first).'
+                    : 'Stock received.',
+            );
             setStockModalOpen(false);
             setStockTarget(null);
             await load();
@@ -287,12 +300,22 @@ export default function InventoryList() {
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>Update Stock</DialogTitle>
+                        <DialogDescription>
+                            Receiving adds to this batch only. Dispensing removes stock across all non-expired batches for this
+                            medicine, earliest expiry first (FEFO).
+                        </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4">
                         <p className="text-sm text-muted-foreground">
                             <span className="font-medium text-foreground">{stockTarget?.medicine_name ?? 'Medicine'}</span>
-                            {' · '}
-                            Current: {stockTarget?.quantity ?? 0} units
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                            This batch: <span className="font-medium text-foreground">{stockTarget?.quantity ?? 0}</span> units ·
+                            Total non-expired (all batches):{' '}
+                            <span className="font-medium text-foreground">
+                                {stockTarget ? nonExpiredTotalForRow(stockTarget) : 0}
+                            </span>{' '}
+                            units
                         </p>
                         <div className="space-y-2">
                             <Label>Stock movement</Label>
