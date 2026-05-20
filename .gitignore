@@ -23,3 +23,6 @@ _ide_helper.php
 Homestead.json
 Homestead.yaml
 Thumbs.db
+# Accidental terminal artifact filenames (ESC+[A); [[] is a literal [ in gitignore
+[[]A
+[[]A.pub
