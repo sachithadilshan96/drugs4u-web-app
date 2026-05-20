@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, ClipboardPlus } from 'lucide-react';
 import { toast } from 'sonner';
 import * as prescriptionsApi from '@/api/prescriptions';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useAuthStore } from '@/store/authStore';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -24,6 +25,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { Skeleton } from '@/components/ui/skeleton';
 
 function statusBadgeClass(status) {
     switch (status) {
@@ -85,6 +87,8 @@ function TableSkeleton() {
 }
 
 export default function PrescriptionList() {
+    useDocumentTitle('Prescriptions');
+
     const navigate = useNavigate();
     const role = useAuthStore((s) => s.user?.role);
     const [loading, setLoading] = useState(true);

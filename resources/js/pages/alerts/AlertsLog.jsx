@@ -1,4 +1,8 @@
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+
 export default function AlertsLog() {
+    useDocumentTitle('Alerts log');
+
     return (
         <div>
             <h1 className="text-2xl font-semibold tracking-tight">Alerts</h1>

@@ -27,6 +27,7 @@ import PrescriptionCustomerReport from '@/pages/reports/PrescriptionCustomerRepo
 import StockReport from '@/pages/reports/StockReport';
 import AlertsLog from '@/pages/alerts/AlertsLog';
 import UserManagement from '@/pages/admin/UserManagement';
+import NotFound from '@/pages/errors/NotFound';
 
 class RootErrorBoundary extends Component {
     state = { error: null };
@@ -100,7 +101,7 @@ function AppRoutes() {
                         <Route path="/reports" element={<Reports />} />
                         <Route path="/alerts" element={<AlertsLog />} />
                         <Route path="/admin/users" element={<UserManagement />} />
-                        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                        <Route path="*" element={<NotFound />} />
                     </Route>
                 </Route>
             </Routes>

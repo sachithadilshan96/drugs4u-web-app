@@ -15,6 +15,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
+import { PageErrorBoundary } from '@/components/layout/PageErrorBoundary';
 
 /** @type {Array<{ to: string; label: string; roles: string[]; end?: boolean; indent?: boolean; badgeKey?: 'pending_review' }>} */
 const NAV_ITEMS = [
@@ -306,7 +307,9 @@ export function AppLayout() {
                     <h1 className="min-w-0 flex-1 truncate text-lg font-semibold tracking-tight text-foreground">{title}</h1>
                 </header>
                 <main className="flex-1 overflow-y-auto p-4 md:p-6">
-                    <Outlet />
+                    <PageErrorBoundary resetKey={location.pathname}>
+                        <Outlet />
+                    </PageErrorBoundary>
                 </main>
             </div>
         </div>

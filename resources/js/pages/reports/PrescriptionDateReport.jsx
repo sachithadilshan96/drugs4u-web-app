@@ -4,6 +4,7 @@ import { Loader2 } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { toast } from 'sonner';
 import * as reportsApi from '@/api/reports';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -15,6 +16,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { Skeleton } from '@/components/ui/skeleton';
 
 function defaultDateFrom() {
     const d = new Date();
@@ -27,6 +29,8 @@ function defaultDateTo() {
 }
 
 export default function PrescriptionDateReport() {
+    useDocumentTitle('Prescriptions by date');
+
     const [dateFrom, setDateFrom] = useState(defaultDateFrom);
     const [dateTo, setDateTo] = useState(defaultDateTo);
     const [granularity, setGranularity] = useState(/** @type {'daily' | 'weekly'} */ ('daily'));
@@ -164,7 +168,10 @@ export default function PrescriptionDateReport() {
                 </CardHeader>
                 <CardContent className="space-y-6">
                     {loading && rows.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">Run the report to see data.</p>
+                        <div className="space-y-2 py-2">
+                            <Skeleton className="h-24 w-full" />
+                            <Skeleton className="h-24 w-full" />
+                        </div>
                     ) : null}
                     {!loading && rows.length === 0 ? (
                         <p className="text-sm text-muted-foreground">No prescriptions in this range.</p>

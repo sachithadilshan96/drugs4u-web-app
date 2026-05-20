@@ -8,6 +8,7 @@ import * as inventoryApi from '@/api/inventory';
 import * as medicinesApi from '@/api/medicines';
 import * as prescriptionsApi from '@/api/prescriptions';
 import { customerAgeFromDob, findAllergenConflict, isAgeRestrictedIssue } from '@/lib/prescriptionSafety';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useAuthStore } from '@/store/authStore';
 import {
     AlertDialog,
@@ -135,6 +136,8 @@ function StepIndicator({ step }) {
 }
 
 export default function NewPrescription() {
+    useDocumentTitle('New prescription');
+
     const navigate = useNavigate();
     const user = useAuthStore((s) => s.user);
     const [searchParams] = useSearchParams();

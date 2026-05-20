@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import * as medicinesApi from '@/api/medicines';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -26,6 +27,8 @@ export default function MedicineForm() {
     const params = useParams();
     const editId = params.id ? Number(params.id) : null;
     const isEdit = Number.isFinite(editId) && editId > 0;
+
+    useDocumentTitle(isEdit ? 'Edit medicine' : 'Add medicine');
 
     const [loading, setLoading] = useState(isEdit);
     const [submitting, setSubmitting] = useState(false);

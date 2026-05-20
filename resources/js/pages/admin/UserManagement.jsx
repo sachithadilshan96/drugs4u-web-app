@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import * as usersApi from '@/api/users';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useAuthStore } from '@/store/authStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,6 +24,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
     AlertDialog,
     AlertDialogCancel,
@@ -94,11 +96,11 @@ function UsersTableSkeleton() {
         <div className="space-y-2">
             {Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} className="flex gap-3 rounded-md border border-transparent px-2 py-2">
-                    <div className="h-4 flex-1 animate-pulse rounded bg-muted" />
-                    <div className="h-4 w-24 animate-pulse rounded bg-muted" />
-                    <div className="h-5 w-20 animate-pulse rounded-full bg-muted" />
-                    <div className="h-4 w-28 animate-pulse rounded bg-muted" />
-                    <div className="h-8 w-8 animate-pulse rounded bg-muted" />
+                    <Skeleton className="h-4 flex-1" />
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-5 w-20 rounded-full" />
+                    <Skeleton className="h-4 w-28" />
+                    <Skeleton className="h-8 w-8" />
                 </div>
             ))}
         </div>
@@ -106,6 +108,8 @@ function UsersTableSkeleton() {
 }
 
 export default function UserManagement() {
+    useDocumentTitle('User management');
+
     const currentUser = useAuthStore((s) => s.user);
 
     const [users, setUsers] = useState([]);

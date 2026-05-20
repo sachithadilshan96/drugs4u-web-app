@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Eye, Pencil, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 import * as customersApi from '@/api/customers';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -15,6 +16,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { Skeleton } from '@/components/ui/skeleton';
 
 function formatDob(iso) {
     if (!iso) {
@@ -45,11 +47,11 @@ function CustomersTableSkeleton() {
         <div className="space-y-2 rounded-md border border-border p-4">
             {Array.from({ length: 8 }).map((_, i) => (
                 <div key={i} className="flex gap-3">
-                    <div className="h-4 flex-1 animate-pulse rounded bg-muted" />
-                    <div className="h-4 w-28 animate-pulse rounded bg-muted" />
-                    <div className="h-4 w-24 animate-pulse rounded bg-muted" />
-                    <div className="h-5 w-20 animate-pulse rounded-full bg-muted" />
-                    <div className="h-8 w-24 animate-pulse rounded bg-muted" />
+                    <Skeleton className="h-4 flex-1" />
+                    <Skeleton className="h-4 w-28" />
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-5 w-20 rounded-full" />
+                    <Skeleton className="h-8 w-24" />
                 </div>
             ))}
         </div>
@@ -57,6 +59,8 @@ function CustomersTableSkeleton() {
 }
 
 export default function CustomerList() {
+    useDocumentTitle('Customers');
+
     const navigate = useNavigate();
     const [searchInput, setSearchInput] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');

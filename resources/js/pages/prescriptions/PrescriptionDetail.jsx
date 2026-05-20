@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import * as prescriptionsApi from '@/api/prescriptions';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,6 +15,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { Skeleton } from '@/components/ui/skeleton';
 
 function statusBadgeVariant(status) {
     switch (status) {
@@ -48,6 +50,8 @@ export default function PrescriptionDetail() {
     const [loading, setLoading] = useState(true);
     const [rx, setRx] = useState(null);
 
+    useDocumentTitle(rx ? `Prescription #${rx.id}` : 'Prescription');
+
     useEffect(() => {
         let cancelled = false;
         (async () => {
@@ -75,8 +79,13 @@ export default function PrescriptionDetail() {
 
     if (loading) {
         return (
-            <div className="flex min-h-[40vh] items-center justify-center text-muted-foreground">
-                <Loader2 className="size-8 animate-spin text-teal-600" aria-hidden />
+            <div className="space-y-6">
+                <Skeleton className="h-8 w-48" />
+                <div className="grid gap-4 sm:grid-cols-2">
+                    <Skeleton className="h-40 rounded-xl" />
+                    <Skeleton className="h-40 rounded-xl" />
+                </div>
+                <Skeleton className="h-56 rounded-xl" />
             </div>
         );
     }

@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { ClipboardPlus, Loader2, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import * as customersApi from '@/api/customers';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import MedicationAllergyInput from '@/components/MedicationAllergyInput';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -18,6 +19,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { Skeleton } from '@/components/ui/skeleton';
 
 function splitAllergies(text) {
     if (!text || typeof text !== 'string') {
@@ -64,10 +66,10 @@ function formatDateTime(iso) {
 function ViewSkeleton() {
     return (
         <div className="space-y-6">
-            <div className="h-8 w-64 animate-pulse rounded bg-muted" />
-            <div className="h-48 animate-pulse rounded-xl bg-muted" />
-            <div className="h-40 animate-pulse rounded-xl bg-muted" />
-            <div className="h-56 animate-pulse rounded-xl bg-muted" />
+            <Skeleton className="h-8 w-64" />
+            <Skeleton className="h-48 rounded-xl" />
+            <Skeleton className="h-40 rounded-xl" />
+            <Skeleton className="h-56 rounded-xl" />
         </div>
     );
 }
@@ -76,6 +78,8 @@ export default function CustomerView() {
     const { id } = useParams();
     const [loading, setLoading] = useState(true);
     const [customer, setCustomer] = useState(null);
+
+    useDocumentTitle(customer?.full_name ?? 'Customer');
     const [editingHealth, setEditingHealth] = useState(false);
     const [healthSaving, setHealthSaving] = useState(false);
     const [healthForm, setHealthForm] = useState({

@@ -42,6 +42,14 @@ class PrescriptionController extends Controller
         if ($request->filled('customer_id')) {
             $query->where('customer_id', (int) $request->input('customer_id'));
         }
+        if ($request->filled('date')) {
+            $raw = $request->string('date')->toString();
+            if ($raw === 'today') {
+                $query->whereDate('created_at', Carbon::today());
+            } else {
+                $query->whereDate('created_at', $request->date('date'));
+            }
+        }
         if ($request->filled('date_from')) {
             $query->whereDate('created_at', '>=', $request->date('date_from'));
         }
