@@ -72,6 +72,7 @@ export default function InventoryList() {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const addStockFromQuery = searchParams.get('addStock');
+    const packageIdFromQuery = searchParams.get('packageId');
     const medicineIdFromQuery = searchParams.get('medicineId');
 
     const [loading, setLoading] = useState(true);
@@ -86,7 +87,7 @@ export default function InventoryList() {
 
     const [addDialogOpen, setAddDialogOpen] = useState(false);
     const [medicineOptions, setMedicineOptions] = useState([]);
-    const [newMedicineId, setNewMedicineId] = useState('');
+    const [newPackageId, setNewPackageId] = useState('');
     const [newQty, setNewQty] = useState('1');
     const [newExpiry, setNewExpiry] = useState('');
     const [creating, setCreating] = useState(false);
@@ -170,7 +171,7 @@ export default function InventoryList() {
     const openAddInventoryDialog = useCallback(
         async (preselectMedicineId) => {
             await loadMedicinesForPicker();
-            setNewMedicineId(preselectMedicineId != null && preselectMedicineId !== '' ? String(preselectMedicineId) : '');
+            setNewPackageId(preselectMedicineId != null && preselectMedicineId !== '' ? String(preselectMedicineId) : '');
             setNewQty('1');
             setNewExpiry('');
             setAddDialogOpen(true);
@@ -184,7 +185,7 @@ export default function InventoryList() {
         }
         let cancelled = false;
         (async () => {
-            await openAddInventoryDialog(medicineIdFromQuery ?? undefined);
+            await openAddInventoryDialog(packageIdFromQuery ?? medicineIdFromQuery ?? undefined);
             if (cancelled) {
                 return;
             }
@@ -193,20 +194,20 @@ export default function InventoryList() {
         return () => {
             cancelled = true;
         };
-    }, [addStockFromQuery, medicineIdFromQuery, navigate, openAddInventoryDialog]);
+    }, [addStockFromQuery, packageIdFromQuery, medicineIdFromQuery, navigate, openAddInventoryDialog]);
 
     const submitNewInventory = useCallback(async () => {
-        const medId = Number.parseInt(newMedicineId, 10);
+        const pkgId = Number.parseInt(newPackageId, 10);
         const qty = Number.parseInt(newQty, 10);
-        if (!medId || !Number.isFinite(qty) || qty < 1 || !newExpiry) {
-            toast.error('Select medicine, quantity, and expiry date.');
+        if (!pkgId || !Number.isFinite(qty) || qty < 1 || !newExpiry) {
+            toast.error('Select package, quantity, and expiry date.');
             return;
         }
 
         setCreating(true);
         try {
             await inventoryApi.createInventoryRow({
-                medicine_id: medId,
+                package_id: pkgId,
                 quantity: qty,
                 expiry_date: newExpiry,
             });
@@ -218,7 +219,7 @@ export default function InventoryList() {
         } finally {
             setCreating(false);
         }
-    }, [load, newExpiry, newMedicineId, newQty]);
+    }, [load, newExpiry, newPackageId, newQty]);
 
     return (
         <div className="space-y-6">
@@ -256,7 +257,7 @@ export default function InventoryList() {
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead>Medicine</TableHead>
+                                <TableHead>Product</TableHead>
                                 <TableHead>Quantity</TableHead>
                                 <TableHead>Expiry Date</TableHead>
                                 <TableHead>Status</TableHead>
@@ -294,7 +295,12 @@ export default function InventoryList() {
                                     const tinted = status.label === 'LOW STOCK' || status.label === 'EXPIRED';
                                     return (
                                         <TableRow key={row.id} className={tinted ? 'bg-red-50/60 dark:bg-red-950/20' : undefined}>
-                                            <TableCell className="font-medium">{row.medicine_name ?? '—'}</TableCell>
+                                            <TableCell className="font-medium">
+                                                <div>{row.medicine_name ?? '—'}</div>
+                                                {row.package_description ? (
+                                                    <div className="text-xs text-muted-foreground">{row.package_description}</div>
+                                                ) : null}
+                                            </TableCell>
                                             <TableCell>{row.quantity}</TableCell>
                                             <TableCell>{formatDate(row.expiry_date)}</TableCell>
                                             <TableCell>
@@ -322,12 +328,17 @@ export default function InventoryList() {
                         <DialogTitle>Update Stock</DialogTitle>
                         <DialogDescription>
                             Receiving adds to this batch only. Dispensing removes stock across all non-expired batches for this
-                            medicine, earliest expiry first (FEFO).
+                            package SKU, earliest expiry first (FEFO).
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4">
                         <p className="text-sm text-muted-foreground">
-                            <span className="font-medium text-foreground">{stockTarget?.medicine_name ?? 'Medicine'}</span>
+                            <span className="font-medium text-foreground">
+                                {stockTarget?.medicine_name ?? '—'}
+                                {stockTarget?.package_description ? (
+                                    <span className="text-muted-foreground"> — {stockTarget.package_description}</span>
+                                ) : null}
+                            </span>
                         </p>
                         <p className="text-sm text-muted-foreground">
                             This batch: <span className="font-medium text-foreground">{stockTarget?.quantity ?? 0}</span> units ·
@@ -394,21 +405,23 @@ export default function InventoryList() {
                     <DialogHeader>
                         <DialogTitle>Update inventory</DialogTitle>
                         <DialogDescription>
-                            Add a new stock batch: choose a medicine from the catalogue, quantity received, and expiry date.
+                            Add a new stock batch: choose a medicine package from the catalogue, quantity received, and expiry date.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4">
                         <div className="space-y-2">
-                            <Label htmlFor="new-med">Medicine</Label>
+                            <Label htmlFor="new-med">Package</Label>
                             <select
                                 id="new-med"
                                 className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                                value={newMedicineId}
-                                onChange={(e) => setNewMedicineId(e.target.value)}
+                                value={newPackageId}
+                                onChange={(e) => setNewPackageId(e.target.value)}
                             >
-                                <option value="">Select medicine…</option>
+                                <option value="">Select package…</option>
                                 {medicineOptions.map((m) => (
-                                    <option key={m.id} value={m.id}>{m.name}</option>
+                                    <option key={m.package_id} value={String(m.package_id)}>
+                                        {m.medicine_name} — {m.line_label}
+                                    </option>
                                 ))}
                             </select>
                         </div>

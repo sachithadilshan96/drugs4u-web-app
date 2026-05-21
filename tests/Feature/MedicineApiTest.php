@@ -2,13 +2,13 @@
 
 namespace Tests\Feature;
 
-use App\Models\Inventory;
 use App\Models\Medicine;
 use App\Models\User;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Testing\TestResponse;
+use Tests\Support\PharmaFixtures;
 use Tests\TestCase;
 
 class MedicineApiTest extends TestCase
@@ -60,26 +60,24 @@ class MedicineApiTest extends TestCase
         ]);
         $this->loginAs($user);
 
-        $stocked = Medicine::query()->create([
+        $stocked = PharmaFixtures::medicineWithPackage([
             'name' => 'Stocked Med',
-            'description' => 'x',
             'requires_age_check' => false,
-            'min_age' => 18,
+            'min_age' => null,
+            'age_restriction_label' => null,
+            'age_restriction_notes' => null,
         ]);
-        Inventory::query()->create([
-            'medicine_id' => $stocked->id,
-            'quantity' => 1,
-            'expiry_date' => now()->addYear()->toDateString(),
-        ]);
+        PharmaFixtures::inventoryForPackage($stocked['package'], ['quantity' => 1]);
 
-        Medicine::query()->create([
+        PharmaFixtures::medicineWithPackage([
             'name' => 'No Stock Row',
-            'description' => 'x',
             'requires_age_check' => false,
-            'min_age' => 18,
+            'min_age' => null,
+            'age_restriction_label' => null,
+            'age_restriction_notes' => null,
         ]);
 
-               $this->getJson('/api/medicines?search=Stocked')
+        $this->getJson('/api/medicines?search=Stocked')
             ->assertOk()
             ->assertJsonPath('data.0.name', 'Stocked Med')
             ->assertJsonCount(1, 'data');
@@ -94,19 +92,20 @@ class MedicineApiTest extends TestCase
         ]);
         $this->loginAs($user);
 
-        $noStock = Medicine::query()->create([
+        $noStock = PharmaFixtures::medicineWithPackage([
             'name' => 'Catalogue Only Med',
-            'description' => 'x',
             'requires_age_check' => false,
             'min_age' => null,
+            'age_restriction_label' => null,
+            'age_restriction_notes' => null,
         ]);
 
         $this->getJson('/api/medicines?picker=1&catalog=1')
             ->assertOk()
-            ->assertJsonFragment(['id' => $noStock->id, 'name' => 'Catalogue Only Med']);
+            ->assertJsonFragment(['id' => $noStock['medicine']->id, 'name' => 'Catalogue Only Med']);
 
         $pickerOnly = $this->getJson('/api/medicines?picker=1')->assertOk()->json('data');
         $ids = collect($pickerOnly)->pluck('id')->all();
-        $this->assertNotContains($noStock->id, $ids);
+        $this->assertNotContains($noStock['medicine']->id, $ids);
     }
 }

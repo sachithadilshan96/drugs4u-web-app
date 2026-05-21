@@ -3,13 +3,14 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Medicine extends Model
 {
     protected $fillable = [
         'name',
-        'description',
+        'rxcui',
         'requires_age_check',
         'min_age',
         'age_restriction_label',
@@ -46,20 +47,36 @@ class Medicine extends Model
     }
 
     /**
-     * Stock rows for this medicine (inventory table).
-     *
-     * @return HasMany<Inventory, $this>
+     * @return HasMany<MedicineVariant, $this>
      */
-    public function inventoryItems(): HasMany
+    public function variants(): HasMany
     {
-        return $this->hasMany(Inventory::class, 'medicine_id');
+        return $this->hasMany(MedicineVariant::class);
     }
 
     /**
-     * @return HasMany<PrescriptionItem, $this>
+     * @return HasMany<MedicineSupplier, $this>
      */
-    public function prescriptionItems(): HasMany
+    public function medicineSuppliers(): HasMany
     {
-        return $this->hasMany(PrescriptionItem::class, 'medicine_id');
+        return $this->hasMany(MedicineSupplier::class);
+    }
+
+    /**
+     * @return BelongsToMany<Supplier, $this, MedicineSupplier>
+     */
+    public function suppliers(): BelongsToMany
+    {
+        return $this->belongsToMany(Supplier::class, 'medicine_suppliers')
+            ->using(MedicineSupplier::class)
+            ->withPivot(['unit_cost', 'lead_time_days', 'is_preferred'])
+            ->withTimestamps();
+    }
+
+    public function getPreferredSupplierAttribute(): ?Supplier
+    {
+        $row = $this->medicineSuppliers()->where('is_preferred', true)->first();
+
+        return $row?->supplier;
     }
 }

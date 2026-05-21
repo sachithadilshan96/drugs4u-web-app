@@ -3,8 +3,6 @@
 namespace Tests\Feature;
 
 use App\Models\Customer;
-use App\Models\Inventory;
-use App\Models\Medicine;
 use App\Models\Prescription;
 use App\Models\PrescriptionItem;
 use App\Models\User;
@@ -13,6 +11,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Testing\TestResponse;
+use Tests\Support\PharmaFixtures;
 use Tests\TestCase;
 
 class ReportApiTest extends TestCase
@@ -124,11 +123,12 @@ class ReportApiTest extends TestCase
 
         $customer = Customer::factory()->create();
         $pharmacist = User::factory()->create(['role' => 'pharmacist']);
-        $medicine = Medicine::query()->create([
+        $fix = PharmaFixtures::medicineWithPackage([
             'name' => 'Flag Med',
-            'description' => 'x',
             'requires_age_check' => false,
             'min_age' => null,
+            'age_restriction_label' => null,
+            'age_restriction_notes' => null,
         ]);
 
         $base = now()->startOfDay();
@@ -142,7 +142,7 @@ class ReportApiTest extends TestCase
             ]);
             PrescriptionItem::query()->create([
                 'prescription_id' => $rx->id,
-                'medicine_id' => $medicine->id,
+                'package_id' => $fix['package']->id,
                 'quantity' => 1,
                 'dispensed_qty' => 1,
             ]);
@@ -166,14 +166,14 @@ class ReportApiTest extends TestCase
         ]);
         $this->loginAs($admin);
 
-        $medicine = Medicine::query()->create([
+        $fix = PharmaFixtures::medicineWithPackage([
             'name' => 'Stock Med',
-            'description' => 'x',
             'requires_age_check' => false,
             'min_age' => null,
+            'age_restriction_label' => null,
+            'age_restriction_notes' => null,
         ]);
-        Inventory::query()->create([
-            'medicine_id' => $medicine->id,
+        PharmaFixtures::inventoryForPackage($fix['package'], [
             'quantity' => 5,
             'expiry_date' => now()->addYear()->toDateString(),
         ]);

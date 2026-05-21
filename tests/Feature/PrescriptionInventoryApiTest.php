@@ -6,7 +6,6 @@ use App\Models\AgeVerificationLog;
 use App\Models\Customer;
 use App\Models\CustomerHealth;
 use App\Models\Inventory;
-use App\Models\Medicine;
 use App\Models\Prescription;
 use App\Models\User;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
@@ -16,6 +15,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Testing\TestResponse;
+use Tests\Support\PharmaFixtures;
 use Tests\TestCase;
 
 class PrescriptionInventoryApiTest extends TestCase
@@ -125,17 +125,14 @@ class PrescriptionInventoryApiTest extends TestCase
         ]);
         $this->loginAs($user);
 
-        $medicine = Medicine::query()->create([
+        $fix = PharmaFixtures::medicineWithPackage([
             'name' => 'Codeine Phosphate',
-            'description' => 'Test',
             'requires_age_check' => true,
             'min_age' => 18,
+            'age_restriction_label' => '18+',
+            'age_restriction_notes' => null,
         ]);
-        Inventory::query()->create([
-            'medicine_id' => $medicine->id,
-            'quantity' => 50,
-            'expiry_date' => now()->addYear()->toDateString(),
-        ]);
+        PharmaFixtures::inventoryForPackage($fix['package'], ['quantity' => 50]);
 
         $customer = Customer::factory()->create();
         CustomerHealth::query()->create([
@@ -150,7 +147,7 @@ class PrescriptionInventoryApiTest extends TestCase
             'customer_id' => $customer->id,
             'status' => 'dispensed',
             'items' => [
-                ['medicine_id' => $medicine->id, 'quantity' => 1],
+                ['package_id' => $fix['package']->id, 'quantity' => 1],
             ],
         ])->assertStatus(422)->assertJsonPath('message', 'Potential allergy conflict for one or more medicines.');
     }
@@ -164,17 +161,14 @@ class PrescriptionInventoryApiTest extends TestCase
         ]);
         $this->loginAs($user);
 
-        $medicine = Medicine::query()->create([
+        $fix = PharmaFixtures::medicineWithPackage([
             'name' => 'Codeine Linctus',
-            'description' => 'Test',
             'requires_age_check' => true,
             'min_age' => 18,
+            'age_restriction_label' => '18+',
+            'age_restriction_notes' => null,
         ]);
-        Inventory::query()->create([
-            'medicine_id' => $medicine->id,
-            'quantity' => 50,
-            'expiry_date' => now()->addYear()->toDateString(),
-        ]);
+        PharmaFixtures::inventoryForPackage($fix['package'], ['quantity' => 50]);
 
         $customer = Customer::factory()->create();
         CustomerHealth::query()->create([
@@ -189,7 +183,7 @@ class PrescriptionInventoryApiTest extends TestCase
             'customer_id' => $customer->id,
             'status' => 'dispensed',
             'items' => [
-                ['medicine_id' => $medicine->id, 'quantity' => 1],
+                ['package_id' => $fix['package']->id, 'quantity' => 1],
             ],
         ])->assertCreated();
     }
@@ -203,17 +197,14 @@ class PrescriptionInventoryApiTest extends TestCase
         ]);
         $this->loginAs($user);
 
-        $medicine = Medicine::query()->create([
+        $fix = PharmaFixtures::medicineWithPackage([
             'name' => 'Test Paracetamol',
-            'description' => 'Test',
             'requires_age_check' => true,
             'min_age' => 18,
+            'age_restriction_label' => '18+',
+            'age_restriction_notes' => null,
         ]);
-        $inv = Inventory::query()->create([
-            'medicine_id' => $medicine->id,
-            'quantity' => 20,
-            'expiry_date' => now()->addYear()->toDateString(),
-        ]);
+        $inv = PharmaFixtures::inventoryForPackage($fix['package'], ['quantity' => 20]);
 
         $customer = Customer::factory()->create([
             'dob' => now()->subYears(30)->toDateString(),
@@ -223,7 +214,7 @@ class PrescriptionInventoryApiTest extends TestCase
             'customer_id' => $customer->id,
             'status' => 'dispensed',
             'items' => [
-                ['medicine_id' => $medicine->id, 'quantity' => 2],
+                ['package_id' => $fix['package']->id, 'quantity' => 2],
             ],
         ])->assertCreated();
 
@@ -242,17 +233,14 @@ class PrescriptionInventoryApiTest extends TestCase
         ]);
         $this->loginAs($user);
 
-        $medicine = Medicine::query()->create([
+        $fix = PharmaFixtures::medicineWithPackage([
             'name' => 'Minor Restricted Med',
-            'description' => 'Test',
             'requires_age_check' => true,
             'min_age' => 18,
+            'age_restriction_label' => '18+',
+            'age_restriction_notes' => null,
         ]);
-        Inventory::query()->create([
-            'medicine_id' => $medicine->id,
-            'quantity' => 20,
-            'expiry_date' => now()->addYear()->toDateString(),
-        ]);
+        PharmaFixtures::inventoryForPackage($fix['package'], ['quantity' => 20]);
 
         $customer = Customer::factory()->create([
             'dob' => now()->subYears(10)->toDateString(),
@@ -262,7 +250,7 @@ class PrescriptionInventoryApiTest extends TestCase
             'customer_id' => $customer->id,
             'status' => 'dispensed',
             'items' => [
-                ['medicine_id' => $medicine->id, 'quantity' => 1],
+                ['package_id' => $fix['package']->id, 'quantity' => 1],
             ],
         ])->assertStatus(422)->assertJsonPath('message', 'Age verification required');
     }
@@ -276,17 +264,14 @@ class PrescriptionInventoryApiTest extends TestCase
         ]);
         $this->loginAs($user);
 
-        $medicine = Medicine::query()->create([
+        $fix = PharmaFixtures::medicineWithPackage([
             'name' => 'Minor Restricted Med 2',
-            'description' => 'Test',
             'requires_age_check' => true,
             'min_age' => 18,
+            'age_restriction_label' => '18+',
+            'age_restriction_notes' => null,
         ]);
-        $inv = Inventory::query()->create([
-            'medicine_id' => $medicine->id,
-            'quantity' => 20,
-            'expiry_date' => now()->addYear()->toDateString(),
-        ]);
+        $inv = PharmaFixtures::inventoryForPackage($fix['package'], ['quantity' => 20]);
 
         $customer = Customer::factory()->create([
             'dob' => now()->subYears(10)->toDateString(),
@@ -294,7 +279,7 @@ class PrescriptionInventoryApiTest extends TestCase
 
         AgeVerificationLog::query()->create([
             'prescription_id' => null,
-            'medicine_id' => $medicine->id,
+            'medicine_id' => $fix['medicine']->id,
             'customer_id' => $customer->id,
             'pharmacist_id' => $user->id,
             'customer_age' => 10,
@@ -308,7 +293,7 @@ class PrescriptionInventoryApiTest extends TestCase
             'customer_id' => $customer->id,
             'status' => 'dispensed',
             'items' => [
-                ['medicine_id' => $medicine->id, 'quantity' => 2],
+                ['package_id' => $fix['package']->id, 'quantity' => 2],
             ],
         ])->assertCreated();
 
@@ -332,17 +317,14 @@ class PrescriptionInventoryApiTest extends TestCase
             'role' => 'manager',
         ]);
 
-        $medicine = Medicine::query()->create([
+        $fix = PharmaFixtures::medicineWithPackage([
             'name' => 'Review Med',
-            'description' => 'Test',
             'requires_age_check' => true,
             'min_age' => 18,
+            'age_restriction_label' => '18+',
+            'age_restriction_notes' => null,
         ]);
-        $inv = Inventory::query()->create([
-            'medicine_id' => $medicine->id,
-            'quantity' => 20,
-            'expiry_date' => now()->addYear()->toDateString(),
-        ]);
+        $inv = PharmaFixtures::inventoryForPackage($fix['package'], ['quantity' => 20]);
 
         $customer = Customer::factory()->create([
             'dob' => now()->subYears(10)->toDateString(),
@@ -351,7 +333,7 @@ class PrescriptionInventoryApiTest extends TestCase
         $this->loginAs($pharmacist);
         AgeVerificationLog::query()->create([
             'prescription_id' => null,
-            'medicine_id' => $medicine->id,
+            'medicine_id' => $fix['medicine']->id,
             'customer_id' => $customer->id,
             'pharmacist_id' => $pharmacist->id,
             'customer_age' => 10,
@@ -364,7 +346,7 @@ class PrescriptionInventoryApiTest extends TestCase
             'customer_id' => $customer->id,
             'status' => 'dispensed',
             'items' => [
-                ['medicine_id' => $medicine->id, 'quantity' => 3],
+                ['package_id' => $fix['package']->id, 'quantity' => 3],
             ],
         ])->assertCreated();
 
@@ -389,17 +371,14 @@ class PrescriptionInventoryApiTest extends TestCase
             'password' => Hash::make('password'),
             'role' => 'pharmacist',
         ]);
-        $medicine = Medicine::query()->create([
+        $fix = PharmaFixtures::medicineWithPackage([
             'name' => 'No Review Med',
-            'description' => 'Test',
             'requires_age_check' => false,
-            'min_age' => 18,
+            'min_age' => null,
+            'age_restriction_label' => null,
+            'age_restriction_notes' => null,
         ]);
-        Inventory::query()->create([
-            'medicine_id' => $medicine->id,
-            'quantity' => 20,
-            'expiry_date' => now()->addYear()->toDateString(),
-        ]);
+        PharmaFixtures::inventoryForPackage($fix['package'], ['quantity' => 20]);
         $customer = Customer::factory()->create();
 
         $this->loginAs($pharmacist);
@@ -407,7 +386,7 @@ class PrescriptionInventoryApiTest extends TestCase
             'customer_id' => $customer->id,
             'status' => 'pending',
             'items' => [
-                ['medicine_id' => $medicine->id, 'quantity' => 1],
+                ['package_id' => $fix['package']->id, 'quantity' => 1],
             ],
         ])->assertCreated();
 
@@ -429,17 +408,14 @@ class PrescriptionInventoryApiTest extends TestCase
         ]);
         $this->loginAs($user);
 
-        $medicine = Medicine::query()->create([
+        $fix = PharmaFixtures::medicineWithPackage([
             'name' => 'Test Stock',
-            'description' => 'Test',
             'requires_age_check' => false,
-            'min_age' => 18,
+            'min_age' => null,
+            'age_restriction_label' => null,
+            'age_restriction_notes' => null,
         ]);
-        $inv = Inventory::query()->create([
-            'medicine_id' => $medicine->id,
-            'quantity' => 1,
-            'expiry_date' => now()->addYear()->toDateString(),
-        ]);
+        $inv = PharmaFixtures::inventoryForPackage($fix['package'], ['quantity' => 1]);
 
         $this->patchJson("/api/inventory/{$inv->id}", [
             'type' => 'dispense',
@@ -456,20 +432,19 @@ class PrescriptionInventoryApiTest extends TestCase
         ]);
         $this->loginAs($user);
 
-        $medicine = Medicine::query()->create([
+        $fix = PharmaFixtures::medicineWithPackage([
             'name' => 'FEFO Med',
-            'description' => 'Test',
             'requires_age_check' => false,
             'min_age' => null,
+            'age_restriction_label' => null,
+            'age_restriction_notes' => null,
         ]);
 
-        $earlierExpiry = Inventory::query()->create([
-            'medicine_id' => $medicine->id,
+        $earlierExpiry = PharmaFixtures::inventoryForPackage($fix['package'], [
             'quantity' => 3,
             'expiry_date' => now()->addMonths(6)->toDateString(),
         ]);
-        $laterExpiry = Inventory::query()->create([
-            'medicine_id' => $medicine->id,
+        $laterExpiry = PharmaFixtures::inventoryForPackage($fix['package'], [
             'quantity' => 10,
             'expiry_date' => now()->addYears(2)->toDateString(),
         ]);

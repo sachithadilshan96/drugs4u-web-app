@@ -20,7 +20,11 @@ import PrescriptionDetail from '@/pages/prescriptions/PrescriptionDetail';
 import PendingReview from '@/pages/prescriptions/PendingReview';
 import InventoryList from '@/pages/inventory/InventoryList';
 import MedicineList from '@/pages/inventory/MedicineList';
-import MedicineForm from '@/pages/inventory/MedicineForm';
+import AddMedicine from '@/pages/medicines/AddMedicine';
+import MedicineDetail from '@/pages/medicines/MedicineDetail';
+import SupplierList from '@/pages/suppliers/SupplierList';
+import SupplierForm from '@/pages/suppliers/SupplierForm';
+import SupplierDetail from '@/pages/suppliers/SupplierDetail';
 import Reports from '@/pages/reports/Reports';
 import PrescriptionDateReport from '@/pages/reports/PrescriptionDateReport';
 import PrescriptionCustomerReport from '@/pages/reports/PrescriptionCustomerReport';
@@ -91,9 +95,62 @@ function AppRoutes() {
                         />
                         <Route path="/prescriptions/new" element={<NewPrescription />} />
                         <Route path="/prescriptions/:id" element={<PrescriptionDetail />} />
-                        <Route path="/medicines/new" element={<ProtectedRoute requiredRole="admin"><MedicineForm /></ProtectedRoute>} />
-                        <Route path="/medicines/:id/edit" element={<ProtectedRoute requiredRole="admin"><MedicineForm /></ProtectedRoute>} />
-                        <Route path="/medicines" element={<MedicineList />} />
+                        <Route
+                            path="/medicines/add"
+                            element={
+                                <ProtectedRoute requiredRole={['manager', 'admin']}>
+                                    <AddMedicine />
+                                </ProtectedRoute>
+                            }
+                        />
+                        <Route
+                            path="/medicines/:id"
+                            element={
+                                <ProtectedRoute requiredRole={['manager', 'admin']}>
+                                    <MedicineDetail />
+                                </ProtectedRoute>
+                            }
+                        />
+                        <Route
+                            path="/medicines"
+                            element={
+                                <ProtectedRoute requiredRole={['manager', 'admin']}>
+                                    <MedicineList />
+                                </ProtectedRoute>
+                            }
+                        />
+                        <Route
+                            path="/suppliers/add"
+                            element={
+                                <ProtectedRoute requiredRole={['manager', 'admin']}>
+                                    <SupplierForm />
+                                </ProtectedRoute>
+                            }
+                        />
+                        <Route
+                            path="/suppliers/:id/edit"
+                            element={
+                                <ProtectedRoute requiredRole={['manager', 'admin']}>
+                                    <SupplierForm />
+                                </ProtectedRoute>
+                            }
+                        />
+                        <Route
+                            path="/suppliers/:id"
+                            element={
+                                <ProtectedRoute requiredRole={['manager', 'admin']}>
+                                    <SupplierDetail />
+                                </ProtectedRoute>
+                            }
+                        />
+                        <Route
+                            path="/suppliers"
+                            element={
+                                <ProtectedRoute requiredRole={['manager', 'admin']}>
+                                    <SupplierList />
+                                </ProtectedRoute>
+                            }
+                        />
                         <Route path="/inventory" element={<InventoryList />} />
                         <Route path="/reports/prescriptions-by-date" element={<PrescriptionDateReport />} />
                         <Route path="/reports/prescriptions-by-customer" element={<PrescriptionCustomerReport />} />

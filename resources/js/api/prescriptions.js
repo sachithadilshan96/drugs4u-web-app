@@ -16,7 +16,7 @@ export function getPrescription(id) {
  *   customer_id: number;
  *   notes?: string;
  *   status?: string;
- *   items: Array<{ medicine_id: number; quantity: number }>;
+ *   items: Array<{ package_id: number; quantity: number }>;
  *   acknowledged_allergy_overrides?: Array<{ medicine_id: number; matched_allergen: string }>;
  * }} data
  */

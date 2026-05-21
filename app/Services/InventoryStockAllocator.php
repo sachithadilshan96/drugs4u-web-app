@@ -7,36 +7,36 @@ use Carbon\Carbon;
 use Illuminate\Http\Exceptions\HttpResponseException;
 
 /**
- * Non-expired stock allocation by FEFO (first expiry, first out), stable by row id.
+ * Non-expired stock allocation by FEFO (first expiry, first out), stable by row id — per package SKU.
  */
 final class InventoryStockAllocator
 {
-    public function sumNonExpiredForMedicine(int $medicineId): int
+    public function sumNonExpiredForPackage(int $packageId): int
     {
         $today = Carbon::today()->toDateString();
 
         return (int) Inventory::query()
-            ->where('medicine_id', $medicineId)
+            ->where('package_id', $packageId)
             ->whereDate('expiry_date', '>=', $today)
             ->sum('quantity');
     }
 
-    public function assertSufficientNonExpiredStock(int $medicineId, int $qtyNeeded): void
+    public function assertSufficientNonExpiredStockForPackage(int $packageId, int $qtyNeeded): void
     {
-        $available = $this->sumNonExpiredForMedicine($medicineId);
+        $available = $this->sumNonExpiredForPackage($packageId);
 
         if ($available < $qtyNeeded) {
             throw new HttpResponseException(response()->json([
                 'message' => 'Insufficient non-expired stock for one or more line items.',
-                'medicine_id' => $medicineId,
+                'package_id' => $packageId,
             ], 422));
         }
     }
 
     /**
-     * Decrement quantity across all non-expired batches for the medicine, earliest expiry first.
+     * Decrement quantity across all non-expired batches for the package, earliest expiry first.
      */
-    public function decrementNonExpiredByFefo(int $medicineId, int $qtyNeeded): void
+    public function decrementNonExpiredByFefoForPackage(int $packageId, int $qtyNeeded): void
     {
         if ($qtyNeeded <= 0) {
             return;
@@ -46,7 +46,7 @@ final class InventoryStockAllocator
         $remaining = $qtyNeeded;
 
         $rows = Inventory::query()
-            ->where('medicine_id', $medicineId)
+            ->where('package_id', $packageId)
             ->whereDate('expiry_date', '>=', $today)
             ->orderBy('expiry_date')
             ->orderBy('id')

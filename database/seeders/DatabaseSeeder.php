@@ -8,8 +8,12 @@ use App\Models\CustomerHealth;
 use App\Models\Inventory;
 use App\Models\MedicationHistory;
 use App\Models\Medicine;
+use App\Models\MedicinePackage;
+use App\Models\MedicineSupplier;
+use App\Models\MedicineVariant;
 use App\Models\Prescription;
 use App\Models\PrescriptionItem;
+use App\Models\Supplier;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
@@ -17,9 +21,6 @@ use Illuminate\Support\Facades\Hash;
 
 class DatabaseSeeder extends Seeder
 {
-    /**
-     * Seed the application's database.
-     */
     public function run(): void
     {
         DB::transaction(function (): void {
@@ -28,10 +29,11 @@ class DatabaseSeeder extends Seeder
             MedicationHistory::query()->delete();
             Prescription::query()->delete();
             Inventory::query()->delete();
+            MedicineSupplier::query()->delete();
             CustomerHealth::query()->delete();
-            // Hard-delete customers so unique phone constraints reset (models use SoftDeletes).
             DB::table('customers')->delete();
             Medicine::query()->delete();
+            Supplier::query()->delete();
             AlertLog::query()->delete();
             User::query()->delete();
 
@@ -56,47 +58,113 @@ class DatabaseSeeder extends Seeder
                 'role' => 'manager',
             ]);
 
+            $supplierAlliance = Supplier::query()->create([
+                'name' => 'Alliance Healthcare',
+                'contact_person' => 'Alex Morgan',
+                'phone' => '02079460001',
+                'email' => 'orders@alliance-health.example.test',
+                'address_line1' => '1 Distribution Way',
+                'city' => 'London',
+                'postcode' => 'EC1A1BB',
+                'notes' => 'Primary wholesaler',
+                'is_active' => true,
+            ]);
+
+            $supplierPhoenix = Supplier::query()->create([
+                'name' => 'Phoenix Medical Supplies',
+                'contact_person' => 'Jamie Lee',
+                'phone' => '01782220002',
+                'email' => 'sales@phoenix-med.example.test',
+                'address_line1' => 'Unit 4 Industrial Estate',
+                'city' => 'Stoke-on-Trent',
+                'postcode' => 'ST1 5NP',
+                'notes' => null,
+                'is_active' => true,
+            ]);
+
             $medicineSpecs = [
-                ['name' => 'Codeine', 'description' => 'Opioid analgesic', 'requires_age_check' => true, 'min_age' => 18, 'age_restriction_label' => 'Must be 18+ — Controlled Analgesic', 'age_restriction_notes' => 'Request photo ID. Accept passport, driving licence, or proof of age card.'],
-                ['name' => 'Methadone', 'description' => 'Opioid substitution', 'requires_age_check' => true, 'min_age' => 18, 'age_restriction_label' => 'Must be 18+ — Controlled Substance', 'age_restriction_notes' => 'Request photo ID. Two forms of ID recommended for methadone.'],
-                ['name' => 'Paracetamol', 'description' => 'Analgesic / antipyretic', 'requires_age_check' => false, 'min_age' => null, 'age_restriction_label' => null, 'age_restriction_notes' => null],
-                ['name' => 'Ibuprofen', 'description' => 'NSAID', 'requires_age_check' => false, 'min_age' => null, 'age_restriction_label' => null, 'age_restriction_notes' => null],
-                ['name' => 'Amoxicillin', 'description' => 'Penicillin antibiotic', 'requires_age_check' => false, 'min_age' => null, 'age_restriction_label' => null, 'age_restriction_notes' => null],
-                ['name' => 'Diazepam', 'description' => 'Benzodiazepine', 'requires_age_check' => true, 'min_age' => 18, 'age_restriction_label' => 'Must be 18+ — Controlled Benzodiazepine', 'age_restriction_notes' => 'Request photo ID. Check NHS record if patient claims exemption.'],
-                ['name' => 'Loratadine', 'description' => 'Antihistamine', 'requires_age_check' => false, 'min_age' => null, 'age_restriction_label' => null, 'age_restriction_notes' => null],
-                ['name' => 'Cetirizine', 'description' => 'Antihistamine', 'requires_age_check' => false, 'min_age' => null, 'age_restriction_label' => null, 'age_restriction_notes' => null],
-                ['name' => 'Omeprazole', 'description' => 'PPI', 'requires_age_check' => false, 'min_age' => null, 'age_restriction_label' => null, 'age_restriction_notes' => null],
-                ['name' => 'Simvastatin', 'description' => 'Statin', 'requires_age_check' => false, 'min_age' => null, 'age_restriction_label' => null, 'age_restriction_notes' => null],
-                ['name' => 'Amlodipine', 'description' => 'Calcium channel blocker', 'requires_age_check' => false, 'min_age' => null, 'age_restriction_label' => null, 'age_restriction_notes' => null],
-                ['name' => 'Gabapentin', 'description' => 'Neuropathic pain', 'requires_age_check' => false, 'min_age' => null, 'age_restriction_label' => null, 'age_restriction_notes' => null],
-                ['name' => 'Tramadol', 'description' => 'Opioid analgesic', 'requires_age_check' => true, 'min_age' => 18, 'age_restriction_label' => 'Must be 18+ — Controlled Analgesic', 'age_restriction_notes' => 'Request photo ID. Accept passport, driving licence, or proof of age card.'],
-                ['name' => 'Naproxen', 'description' => 'NSAID', 'requires_age_check' => false, 'min_age' => null, 'age_restriction_label' => null, 'age_restriction_notes' => null],
-                ['name' => 'Furosemide', 'description' => 'Loop diuretic', 'requires_age_check' => false, 'min_age' => null, 'age_restriction_label' => null, 'age_restriction_notes' => null],
+                ['name' => 'Codeine', 'requires_age_check' => true, 'min_age' => 18, 'age_restriction_label' => 'Must be 18+ — Controlled Analgesic', 'age_restriction_notes' => 'Request photo ID. Accept passport, driving licence, or proof of age card.', 'strength' => '30 MG', 'form' => 'Oral Tablet', 'route' => 'Oral', 'pkg' => 'Blister pack of 28 tablets', 'size' => 28, 'unit' => 'Tablets'],
+                ['name' => 'Methadone', 'requires_age_check' => true, 'min_age' => 18, 'age_restriction_label' => 'Must be 18+ — Controlled Substance', 'age_restriction_notes' => 'Request photo ID. Two forms of ID recommended for methadone.', 'strength' => '40 MG', 'form' => 'Oral Solution', 'route' => 'Oral', 'pkg' => '500ml bottle', 'size' => 500, 'unit' => 'ml'],
+                ['name' => 'Paracetamol', 'requires_age_check' => false, 'min_age' => null, 'age_restriction_label' => null, 'age_restriction_notes' => null, 'strength' => '500 MG', 'form' => 'Oral Tablet', 'route' => 'Oral', 'pkg' => 'Blister pack of 16 tablets', 'size' => 16, 'unit' => 'Tablets'],
+                ['name' => 'Ibuprofen', 'requires_age_check' => false, 'min_age' => null, 'age_restriction_label' => null, 'age_restriction_notes' => null, 'strength' => '400 MG', 'form' => 'Oral Tablet', 'route' => 'Oral', 'pkg' => 'Blister pack of 24 tablets', 'size' => 24, 'unit' => 'Tablets'],
+                ['name' => 'Amoxicillin', 'requires_age_check' => false, 'min_age' => null, 'age_restriction_label' => null, 'age_restriction_notes' => null, 'strength' => '500 MG', 'form' => 'Oral Capsule', 'route' => 'Oral', 'pkg' => 'Blister pack of 21 capsules', 'size' => 21, 'unit' => 'Capsules'],
+                ['name' => 'Diazepam', 'requires_age_check' => true, 'min_age' => 18, 'age_restriction_label' => 'Must be 18+ — Controlled Benzodiazepine', 'age_restriction_notes' => 'Request photo ID. Check NHS record if patient claims exemption.', 'strength' => '5 MG', 'form' => 'Oral Tablet', 'route' => 'Oral', 'pkg' => 'Blister pack of 28 tablets', 'size' => 28, 'unit' => 'Tablets'],
+                ['name' => 'Loratadine', 'requires_age_check' => false, 'min_age' => null, 'age_restriction_label' => null, 'age_restriction_notes' => null, 'strength' => '10 MG', 'form' => 'Oral Tablet', 'route' => 'Oral', 'pkg' => 'Blister pack of 30 tablets', 'size' => 30, 'unit' => 'Tablets'],
+                ['name' => 'Cetirizine', 'requires_age_check' => false, 'min_age' => null, 'age_restriction_label' => null, 'age_restriction_notes' => null, 'strength' => '10 MG', 'form' => 'Oral Tablet', 'route' => 'Oral', 'pkg' => 'Blister pack of 30 tablets', 'size' => 30, 'unit' => 'Tablets'],
+                ['name' => 'Omeprazole', 'requires_age_check' => false, 'min_age' => null, 'age_restriction_label' => null, 'age_restriction_notes' => null, 'strength' => '20 MG', 'form' => 'Oral Capsule', 'route' => 'Oral', 'pkg' => 'Blister pack of 28 capsules', 'size' => 28, 'unit' => 'Capsules'],
+                ['name' => 'Simvastatin', 'requires_age_check' => false, 'min_age' => null, 'age_restriction_label' => null, 'age_restriction_notes' => null, 'strength' => '40 MG', 'form' => 'Oral Tablet', 'route' => 'Oral', 'pkg' => 'Blister pack of 28 tablets', 'size' => 28, 'unit' => 'Tablets'],
+                ['name' => 'Amlodipine', 'requires_age_check' => false, 'min_age' => null, 'age_restriction_label' => null, 'age_restriction_notes' => null, 'strength' => '5 MG', 'form' => 'Oral Tablet', 'route' => 'Oral', 'pkg' => 'Blister pack of 28 tablets', 'size' => 28, 'unit' => 'Tablets'],
+                ['name' => 'Gabapentin', 'requires_age_check' => false, 'min_age' => null, 'age_restriction_label' => null, 'age_restriction_notes' => null, 'strength' => '300 MG', 'form' => 'Oral Capsule', 'route' => 'Oral', 'pkg' => 'Blister pack of 100 capsules', 'size' => 100, 'unit' => 'Capsules'],
+                ['name' => 'Tramadol', 'requires_age_check' => true, 'min_age' => 18, 'age_restriction_label' => 'Must be 18+ — Controlled Analgesic', 'age_restriction_notes' => 'Request photo ID. Accept passport, driving licence, or proof of age card.', 'strength' => '50 MG', 'form' => 'Oral Capsule', 'route' => 'Oral', 'pkg' => 'Blister pack of 30 capsules', 'size' => 30, 'unit' => 'Capsules'],
+                ['name' => 'Naproxen', 'requires_age_check' => false, 'min_age' => null, 'age_restriction_label' => null, 'age_restriction_notes' => null, 'strength' => '500 MG', 'form' => 'Oral Tablet', 'route' => 'Oral', 'pkg' => 'Blister pack of 28 tablets', 'size' => 28, 'unit' => 'Tablets'],
+                ['name' => 'Furosemide', 'requires_age_check' => false, 'min_age' => null, 'age_restriction_label' => null, 'age_restriction_notes' => null, 'strength' => '40 MG', 'form' => 'Oral Tablet', 'route' => 'Oral', 'pkg' => 'Blister pack of 28 tablets', 'size' => 28, 'unit' => 'Tablets'],
             ];
 
-            $medicines = collect($medicineSpecs)->map(fn (array $row) => Medicine::query()->create([
-                'name' => $row['name'],
-                'description' => $row['description'],
-                'requires_age_check' => $row['requires_age_check'],
-                'min_age' => $row['min_age'],
-                'age_restriction_label' => $row['age_restriction_label'],
-                'age_restriction_notes' => $row['age_restriction_notes'],
-            ]));
+            /** @var array<string, MedicinePackage> $pkgByName */
+            $pkgByName = [];
+            /** @var array<string, int> $medIdByName */
+            $medIdByName = [];
 
-            $byName = $medicines->keyBy('name');
+            foreach ($medicineSpecs as $spec) {
+                $medicine = Medicine::query()->create([
+                    'name' => $spec['name'],
+                    'rxcui' => null,
+                    'requires_age_check' => $spec['requires_age_check'],
+                    'min_age' => $spec['min_age'],
+                    'age_restriction_label' => $spec['age_restriction_label'],
+                    'age_restriction_notes' => $spec['age_restriction_notes'],
+                ]);
+
+                $variant = MedicineVariant::query()->create([
+                    'medicine_id' => $medicine->id,
+                    'brand_name' => null,
+                    'manufacturer' => null,
+                    'strength' => $spec['strength'],
+                    'form' => $spec['form'],
+                    'route' => $spec['route'],
+                    'rxcui_variant' => null,
+                ]);
+
+                $package = MedicinePackage::query()->create([
+                    'variant_id' => $variant->id,
+                    'package_description' => $spec['pkg'],
+                    'package_size' => $spec['size'],
+                    'package_unit' => $spec['unit'],
+                    'barcode' => null,
+                ]);
+
+                $pkgByName[$spec['name']] = $package;
+                $medIdByName[$spec['name']] = $medicine->id;
+
+                MedicineSupplier::query()->create([
+                    'medicine_id' => $medicine->id,
+                    'supplier_id' => $supplierAlliance->id,
+                    'unit_cost' => 12.50,
+                    'lead_time_days' => 3,
+                    'is_preferred' => true,
+                ]);
+                MedicineSupplier::query()->create([
+                    'medicine_id' => $medicine->id,
+                    'supplier_id' => $supplierPhoenix->id,
+                    'unit_cost' => 13.00,
+                    'lead_time_days' => 5,
+                    'is_preferred' => false,
+                ]);
+            }
 
             $expiryFar = now()->addYear()->toDateString();
             $expirySoon = now()->addMonths(6)->toDateString();
 
-            foreach ($medicines as $medicine) {
-                $qty = match ($medicine->name) {
+            foreach ($pkgByName as $name => $package) {
+                $qty = match ($name) {
                     'Codeine', 'Paracetamol', 'Ibuprofen' => 5,
                     default => 80,
                 };
                 Inventory::query()->create([
-                    'medicine_id' => $medicine->id,
+                    'package_id' => $package->id,
+                    'supplier_id' => $supplierAlliance->id,
                     'quantity' => $qty,
-                    'expiry_date' => $medicine->name === 'Amoxicillin' ? $expirySoon : $expiryFar,
+                    'expiry_date' => $name === 'Amoxicillin' ? $expirySoon : $expiryFar,
                 ]);
             }
 
@@ -139,13 +207,13 @@ class DatabaseSeeder extends Seeder
             ]);
             PrescriptionItem::query()->create([
                 'prescription_id' => $p1->id,
-                'medicine_id' => $byName['Codeine']->id,
+                'package_id' => $pkgByName['Codeine']->id,
                 'quantity' => 1,
                 'dispensed_qty' => 0,
             ]);
             PrescriptionItem::query()->create([
                 'prescription_id' => $p1->id,
-                'medicine_id' => $byName['Paracetamol']->id,
+                'package_id' => $pkgByName['Paracetamol']->id,
                 'quantity' => 2,
                 'dispensed_qty' => 0,
             ]);
@@ -158,13 +226,13 @@ class DatabaseSeeder extends Seeder
             ]);
             PrescriptionItem::query()->create([
                 'prescription_id' => $p2->id,
-                'medicine_id' => $byName['Amoxicillin']->id,
+                'package_id' => $pkgByName['Amoxicillin']->id,
                 'quantity' => 1,
                 'dispensed_qty' => 1,
             ]);
             PrescriptionItem::query()->create([
                 'prescription_id' => $p2->id,
-                'medicine_id' => $byName['Ibuprofen']->id,
+                'package_id' => $pkgByName['Ibuprofen']->id,
                 'quantity' => 1,
                 'dispensed_qty' => 1,
             ]);
@@ -177,7 +245,7 @@ class DatabaseSeeder extends Seeder
             ]);
             PrescriptionItem::query()->create([
                 'prescription_id' => $p3->id,
-                'medicine_id' => $byName['Methadone']->id,
+                'package_id' => $pkgByName['Methadone']->id,
                 'quantity' => 1,
                 'dispensed_qty' => 0,
             ]);
@@ -190,13 +258,13 @@ class DatabaseSeeder extends Seeder
             ]);
             PrescriptionItem::query()->create([
                 'prescription_id' => $p4->id,
-                'medicine_id' => $byName['Loratadine']->id,
+                'package_id' => $pkgByName['Loratadine']->id,
                 'quantity' => 1,
                 'dispensed_qty' => 0,
             ]);
             PrescriptionItem::query()->create([
                 'prescription_id' => $p4->id,
-                'medicine_id' => $byName['Omeprazole']->id,
+                'package_id' => $pkgByName['Omeprazole']->id,
                 'quantity' => 1,
                 'dispensed_qty' => 0,
             ]);
@@ -209,19 +277,19 @@ class DatabaseSeeder extends Seeder
             ]);
             PrescriptionItem::query()->create([
                 'prescription_id' => $p5->id,
-                'medicine_id' => $byName['Simvastatin']->id,
+                'package_id' => $pkgByName['Simvastatin']->id,
                 'quantity' => 1,
                 'dispensed_qty' => 1,
             ]);
             PrescriptionItem::query()->create([
                 'prescription_id' => $p5->id,
-                'medicine_id' => $byName['Amlodipine']->id,
+                'package_id' => $pkgByName['Amlodipine']->id,
                 'quantity' => 1,
                 'dispensed_qty' => 1,
             ]);
             PrescriptionItem::query()->create([
                 'prescription_id' => $p5->id,
-                'medicine_id' => $byName['Gabapentin']->id,
+                'package_id' => $pkgByName['Gabapentin']->id,
                 'quantity' => 1,
                 'dispensed_qty' => 1,
             ]);
@@ -231,7 +299,7 @@ class DatabaseSeeder extends Seeder
                 MedicationHistory::query()->create([
                     'customer_id' => $customers[3]->id,
                     'prescription_id' => $p2->id,
-                    'medicine_id' => $byName[$medName]->id,
+                    'medicine_id' => $medIdByName[$medName],
                     'dispensed_at' => $p2DispensedAt,
                     'qty' => 1,
                 ]);
@@ -241,7 +309,7 @@ class DatabaseSeeder extends Seeder
                 MedicationHistory::query()->create([
                     'customer_id' => $customers[6]->id,
                     'prescription_id' => $p5->id,
-                    'medicine_id' => $byName[$medName]->id,
+                    'medicine_id' => $medIdByName[$medName],
                     'dispensed_at' => $p5DispensedAt,
                     'qty' => 1,
                 ]);
@@ -249,7 +317,7 @@ class DatabaseSeeder extends Seeder
 
             AlertLog::query()->create([
                 'alert_type' => 'low_stock',
-                'reference_id' => $byName['Codeine']->id,
+                'reference_id' => $pkgByName['Codeine']->id,
                 'message' => 'Codeine stock below threshold',
                 'dismissed' => false,
             ]);
@@ -259,7 +327,6 @@ class DatabaseSeeder extends Seeder
                 'message' => 'Age-restricted medicines on pending prescription',
                 'dismissed' => false,
             ]);
-
         });
     }
 }

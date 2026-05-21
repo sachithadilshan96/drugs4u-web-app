@@ -8,8 +8,12 @@ use App\Http\Controllers\Api\CustomerHealthController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\InventoryController;
 use App\Http\Controllers\Api\MedicineController;
+use App\Http\Controllers\Api\MedicinePackageController;
+use App\Http\Controllers\Api\MedicineVariantController;
 use App\Http\Controllers\Api\PrescriptionController;
 use App\Http\Controllers\Api\ReportController;
+use App\Http\Controllers\Api\RxNormController;
+use App\Http\Controllers\Api\SupplierController;
 use App\Http\Controllers\Api\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -39,9 +43,25 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::get('age-verifications', [AgeVerificationController::class, 'index'])
         ->middleware('role.manager_or_admin');
 
-    Route::apiResource('medicines', MedicineController::class)->only(['index', 'store', 'show', 'update']);
+    Route::get('rxnorm/search', [RxNormController::class, 'search']);
+    Route::post('rxnorm/import', [RxNormController::class, 'import']);
+
+    Route::get('medicines', [MedicineController::class, 'index']);
+    Route::get('medicines/{medicine}', [MedicineController::class, 'show']);
 
     Route::middleware('role:manager,admin')->group(function (): void {
+        Route::post('medicines', [MedicineController::class, 'store']);
+        Route::put('medicines/{medicine}', [MedicineController::class, 'update']);
+        Route::post('medicines/{medicine}/suppliers', [MedicineController::class, 'attachSupplier']);
+        Route::delete('medicines/{medicine}/suppliers/{supplier}', [MedicineController::class, 'detachSupplier']);
+        Route::post('medicines/{medicine}/variants', [MedicineVariantController::class, 'store']);
+        Route::put('medicines/{medicine}/variants/{variant}', [MedicineVariantController::class, 'update']);
+        Route::post('variants/{variant}/packages', [MedicinePackageController::class, 'store']);
+        Route::put('packages/{package}', [MedicinePackageController::class, 'update']);
+
+        Route::apiResource('suppliers', SupplierController::class);
+        Route::patch('suppliers/{supplier}/deactivate', [SupplierController::class, 'deactivate']);
+
         Route::get('dashboard/analytics', [DashboardController::class, 'analytics']);
         Route::get('reports/prescriptions-by-date', [ReportController::class, 'prescriptionsByDate']);
         Route::get('reports/prescriptions-by-customer', [ReportController::class, 'prescriptionsByCustomer']);

@@ -9,6 +9,7 @@ use App\Models\AlertLog;
 use App\Models\Customer;
 use App\Models\MedicationHistory;
 use App\Models\Medicine;
+use App\Models\MedicinePackage;
 use App\Models\Prescription;
 use App\Models\PrescriptionItem;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -90,7 +91,7 @@ class PrescriptionController extends Controller
             'notes' => ['nullable', 'string', 'max:5000'],
             'status' => ['nullable', Rule::in(['pending', 'dispensed'])],
             'items' => ['required', 'array', 'min:1'],
-            'items.*.medicine_id' => ['required', 'integer', 'exists:medicines,id'],
+            'items.*.package_id' => ['required', 'integer', 'exists:medicine_packages,id'],
             'items.*.quantity' => ['required', 'integer', 'min:1', 'max:9999'],
             'acknowledged_allergy_overrides' => ['nullable', 'array'],
             'acknowledged_allergy_overrides.*.medicine_id' => ['required', 'integer', 'exists:medicines,id'],
@@ -103,10 +104,11 @@ class PrescriptionController extends Controller
             ->with('customerHealth')
             ->findOrFail($validated['customer_id']);
 
-        $medicineIds = collect($validated['items'])->pluck('medicine_id')->unique()->values()->all();
+        $itemsForChecks = $this->augmentItemsWithMedicineIds($validated['items']);
+        $medicineIds = collect($itemsForChecks)->pluck('medicine_id')->unique()->values()->all();
         $medicines = Medicine::query()->whereIn('id', $medicineIds)->get()->keyBy('id');
 
-        $allergyConflicts = $this->detectAllergyConflicts($customer, $validated['items'], $medicines);
+        $allergyConflicts = $this->detectAllergyConflicts($customer, $itemsForChecks, $medicines);
         $overrideRows = collect($validated['acknowledged_allergy_overrides'] ?? []);
         $unresolvedAllergies = [];
         foreach ($allergyConflicts as $c) {
@@ -125,7 +127,7 @@ class PrescriptionController extends Controller
             ], 422);
         }
 
-        $ageWarnings = $this->collectAgeRestrictionWarnings($customer, $validated['items'], $medicines);
+        $ageWarnings = $this->collectAgeRestrictionWarnings($customer, $itemsForChecks, $medicines);
         $since = Carbon::now()->subMinutes(30);
         $pharmacistId = (int) $request->user()->id;
         foreach ($ageWarnings as $w) {
@@ -181,18 +183,18 @@ class PrescriptionController extends Controller
             foreach ($validated['items'] as $row) {
                 PrescriptionItem::query()->create([
                     'prescription_id' => $rx->id,
-                    'medicine_id' => $row['medicine_id'],
+                    'package_id' => $row['package_id'],
                     'quantity' => $row['quantity'],
                     'dispensed_qty' => $status === 'dispensed' ? $row['quantity'] : 0,
                 ]);
             }
 
             if ($status === 'dispensed') {
-                $rx->load('items');
+                $rx->load(['items.package.variant.medicine']);
                 $this->fulfillDispensedPrescription($rx);
             }
 
-            return $rx->fresh(['items.medicine', 'customer', 'pharmacist']);
+            return $rx->fresh(['items.package.variant.medicine', 'customer', 'pharmacist']);
         });
 
         return response()->json([
@@ -203,7 +205,7 @@ class PrescriptionController extends Controller
 
     public function show(Prescription $prescription): JsonResponse
     {
-        $prescription->load(['items.medicine', 'customer', 'pharmacist', 'reviewer']);
+        $prescription->load(['items.package.variant.medicine', 'customer', 'pharmacist', 'reviewer']);
 
         return response()->json(['data' => $this->serializePrescriptionDetail($prescription)]);
     }
@@ -212,7 +214,7 @@ class PrescriptionController extends Controller
     {
         $rows = Prescription::query()
             ->where('status', 'pending_review')
-            ->with(['customer', 'pharmacist', 'items.medicine'])
+            ->with(['customer', 'pharmacist', 'items.package.variant.medicine'])
             ->orderBy('flagged_at')
             ->orderByDesc('created_at')
             ->get();
@@ -238,7 +240,7 @@ class PrescriptionController extends Controller
 
         if ($validated['decision'] === 'approve') {
             DB::transaction(function () use ($prescription, $user, $managerNote) {
-                $prescription->load('items');
+                $prescription->load(['items.package.variant.medicine']);
                 $this->fulfillDispensedPrescription($prescription);
                 $baseNotes = $prescription->notes !== null ? trim((string) $prescription->notes) : '';
                 $append = $managerNote !== '' ? "\n\n[Manager approval — {$user->name}]: ".$managerNote : '';
@@ -257,7 +259,7 @@ class PrescriptionController extends Controller
                 'dismissed' => false,
             ]);
 
-            $fresh = $prescription->fresh(['items.medicine', 'customer', 'pharmacist', 'reviewer']);
+            $fresh = $prescription->fresh(['items.package.variant.medicine', 'customer', 'pharmacist', 'reviewer']);
 
             return response()->json(['data' => $this->serializePrescriptionDetail($fresh)]);
         }
@@ -271,7 +273,7 @@ class PrescriptionController extends Controller
         ]);
 
         return response()->json([
-            'data' => $this->serializePrescriptionDetail($prescription->fresh(['items.medicine', 'customer', 'pharmacist', 'reviewer'])),
+            'data' => $this->serializePrescriptionDetail($prescription->fresh(['items.package.variant.medicine', 'customer', 'pharmacist', 'reviewer'])),
         ]);
     }
 
@@ -290,22 +292,33 @@ class PrescriptionController extends Controller
         if ($new === 'rejected') {
             $prescription->update(['status' => 'rejected']);
 
-            return response()->json(['data' => $this->serializePrescriptionDetail($prescription->fresh(['items.medicine', 'customer', 'pharmacist']))]);
+            return response()->json(['data' => $this->serializePrescriptionDetail($prescription->fresh(['items.package.variant.medicine', 'customer', 'pharmacist']))]);
         }
 
-        $prescription->load('items');
+        $prescription->load(['items.package.variant.medicine']);
         $customerForWarnings = Customer::query()
             ->with('customerHealth')
             ->findOrFail($prescription->customer_id);
+        $itemsForAge = $prescription->items
+            ->map(function (PrescriptionItem $i) {
+                $med = $i->resolvedMedicine();
+
+                return [
+                    'medicine_id' => $med?->id ?? 0,
+                    'quantity' => (int) $i->quantity,
+                ];
+            })
+            ->filter(fn (array $r) => $r['medicine_id'] > 0)
+            ->values()
+            ->all();
+        $medicineIds = collect($itemsForAge)->pluck('medicine_id')->unique()->all();
         $medicinesForWarnings = Medicine::query()
-            ->whereIn('id', $prescription->items->pluck('medicine_id'))
+            ->whereIn('id', $medicineIds)
             ->get()
             ->keyBy('id');
         $ageWarnings = $this->collectAgeRestrictionWarnings(
             $customerForWarnings,
-            $prescription->items
-                ->map(fn (PrescriptionItem $i) => ['medicine_id' => (int) $i->medicine_id, 'quantity' => (int) $i->quantity])
-                ->all(),
+            $itemsForAge,
             $medicinesForWarnings
         );
 
@@ -335,13 +348,13 @@ class PrescriptionController extends Controller
         }
 
         DB::transaction(function () use ($prescription) {
-            $prescription->load('items');
+            $prescription->load(['items.package.variant.medicine']);
             $this->fulfillDispensedPrescription($prescription);
             $prescription->update(['status' => 'dispensed']);
         });
 
         return response()->json([
-            'data' => $this->serializePrescriptionDetail($prescription->fresh(['items.medicine', 'customer', 'pharmacist'])),
+            'data' => $this->serializePrescriptionDetail($prescription->fresh(['items.package.variant.medicine', 'customer', 'pharmacist'])),
             'age_warnings' => $ageWarnings,
         ]);
     }
@@ -458,19 +471,56 @@ class PrescriptionController extends Controller
 
         foreach ($prescription->items as $item) {
             $qty = (int) $item->quantity;
-            $this->inventoryStockAllocator->assertSufficientNonExpiredStock((int) $item->medicine_id, $qty);
-            $this->inventoryStockAllocator->decrementNonExpiredByFefo((int) $item->medicine_id, $qty);
+            $packageId = (int) $item->package_id;
+            $this->inventoryStockAllocator->assertSufficientNonExpiredStockForPackage($packageId, $qty);
+            $this->inventoryStockAllocator->decrementNonExpiredByFefoForPackage($packageId, $qty);
 
-            MedicationHistory::query()->create([
-                'customer_id' => $customerId,
-                'prescription_id' => $prescription->id,
-                'medicine_id' => $item->medicine_id,
-                'dispensed_at' => now(),
-                'qty' => $qty,
-            ]);
+            $med = $item->resolvedMedicine();
+            if ($med) {
+                MedicationHistory::query()->create([
+                    'customer_id' => $customerId,
+                    'prescription_id' => $prescription->id,
+                    'medicine_id' => $med->id,
+                    'dispensed_at' => now(),
+                    'qty' => $qty,
+                ]);
+            }
 
             $item->update(['dispensed_qty' => $qty]);
         }
+    }
+
+    /**
+     * @param  array<int, array{package_id: int, quantity: int}>  $items
+     * @return array<int, array{package_id: int, quantity: int, medicine_id: int}>
+     */
+    private function augmentItemsWithMedicineIds(array $items): array
+    {
+        $pids = collect($items)->pluck('package_id')->unique()->filter()->all();
+        $packages = MedicinePackage::query()
+            ->with('variant.medicine')
+            ->whereIn('id', $pids)
+            ->get()
+            ->keyBy('id');
+
+        $out = [];
+        foreach ($items as $row) {
+            $pid = (int) $row['package_id'];
+            $p = $packages->get($pid);
+            if (! $p || ! $p->variant || ! $p->variant->medicine) {
+                throw new HttpResponseException(response()->json([
+                    'message' => 'One or more package IDs could not be resolved.',
+                    'package_id' => $pid,
+                ], 422));
+            }
+            $out[] = [
+                'package_id' => $pid,
+                'quantity' => (int) $row['quantity'],
+                'medicine_id' => (int) $p->variant->medicine_id,
+            ];
+        }
+
+        return $out;
     }
 
     /**
@@ -503,13 +553,22 @@ class PrescriptionController extends Controller
                 'name' => $p->reviewer->name,
             ] : null,
             'items' => $p->relationLoaded('items')
-                ? $p->items->map(fn (PrescriptionItem $i) => [
-                    'id' => $i->id,
-                    'medicine_id' => $i->medicine_id,
-                    'medicine_name' => $i->relationLoaded('medicine') ? $i->medicine?->name : null,
-                    'quantity' => $i->quantity,
-                    'dispensed_qty' => $i->dispensed_qty,
-                ])->values()->all()
+                ? $p->items->map(function (PrescriptionItem $i) {
+                    $med = $i->resolvedMedicine();
+                    $pkg = $i->relationLoaded('package') ? $i->package : null;
+                    $variant = $pkg?->variant;
+
+                    return [
+                        'id' => $i->id,
+                        'package_id' => $i->package_id,
+                        'medicine_id' => $med?->id,
+                        'medicine_name' => $med?->name,
+                        'variant_display' => $variant?->display_name,
+                        'package_description' => $pkg?->full_description,
+                        'quantity' => $i->quantity,
+                        'dispensed_qty' => $i->dispensed_qty,
+                    ];
+                })->values()->all()
                 : [],
             'created_at' => $p->created_at?->toIso8601String(),
             'updated_at' => $p->updated_at?->toIso8601String(),

@@ -4,7 +4,6 @@ import { ChevronRight, Loader2, Plus, Trash2, TriangleAlert } from 'lucide-react
 import { differenceInYears, format, parseISO } from 'date-fns';
 import { toast } from 'sonner';
 import * as customersApi from '@/api/customers';
-import * as inventoryApi from '@/api/inventory';
 import * as medicinesApi from '@/api/medicines';
 import * as prescriptionsApi from '@/api/prescriptions';
 import { customerAgeFromDob, findAllergenConflict, isAgeRestrictedIssue } from '@/lib/prescriptionSafety';
@@ -63,35 +62,22 @@ function formatDobDisplay(dobIso) {
 /**
  * @param {Array<Record<string, unknown>>} rows
  */
-function aggregateMedicineStock(rows) {
-    /** @type {Map<number, { medicine_id: number; medicine_name: string; stock: number; requires_age_check: boolean; min_age: number | null }>} */
-    const map = new Map();
-    for (const r of rows) {
-        const id = Number(r.medicine_id);
-        if (!id) {
-            continue;
-        }
-        const rowMin = typeof r.min_age === 'number' ? r.min_age : r.min_age != null ? Number(r.min_age) : null;
-        if (!map.has(id)) {
-            map.set(id, {
-                medicine_id: id,
-                medicine_name: String(r.medicine_name ?? ''),
-                stock: 0,
-                requires_age_check: Boolean(r.requires_age_check),
-                min_age: Number.isFinite(rowMin) ? rowMin : null,
-            });
-        }
-        const x = map.get(id);
-        x.stock += Number(r.quantity) || 0;
-        x.requires_age_check = x.requires_age_check || Boolean(r.requires_age_check);
-        if (Number.isFinite(rowMin)) {
-            x.min_age =
-                x.min_age == null ? rowMin : Math.max(x.min_age, rowMin);
-        }
-    }
-    return [...map.values()]
-        .filter((m) => m.stock > 0)
-        .sort((a, b) => a.medicine_name.localeCompare(b.medicine_name, 'en-GB'));
+function mapPackagePickerRows(rows) {
+    return (Array.isArray(rows) ? rows : [])
+        .map((r) => ({
+            package_id: Number(r.package_id),
+            medicine_id: Number(r.medicine_id),
+            medicine_name: String(r.medicine_name ?? ''),
+            line_label: String(r.line_label ?? ''),
+            stock: Number(r.stock) || 0,
+            requires_age_check: Boolean(r.requires_age_check),
+            min_age: typeof r.min_age === 'number' ? r.min_age : r.min_age != null ? Number(r.min_age) : null,
+        }))
+        .filter((o) => o.package_id > 0 && o.stock > 0)
+        .sort((a, b) => {
+            const c = a.medicine_name.localeCompare(b.medicine_name, 'en-GB');
+            return c !== 0 ? c : a.line_label.localeCompare(b.line_label, 'en-GB');
+        });
 }
 
 const ID_TYPE_OPTIONS = [
@@ -156,7 +142,7 @@ export default function NewPrescription() {
     const [debouncedMedicineQuery, setDebouncedMedicineQuery] = useState('');
     const [medicineOptions, setMedicineOptions] = useState([]);
     const [medicineSearchLoading, setMedicineSearchLoading] = useState(false);
-    const [medicineId, setMedicineId] = useState('');
+    const [packageId, setPackageId] = useState('');
     const [medicineQty, setMedicineQty] = useState('1');
 
     const [lineItems, setLineItems] = useState([]);
@@ -166,10 +152,10 @@ export default function NewPrescription() {
     const [submitError, setSubmitError] = useState('');
 
     const [allergyDialog, setAllergyDialog] = useState({ open: false, allergen: '', medicineName: '' });
-    /** @type {React.MutableRefObject<{ medicine_id: number; medicine_name: string; quantity: number; requires_age_check: boolean; min_age: number | null } | null>} */
+    /** @type {React.MutableRefObject<{ package_id: number; medicine_id: number; medicine_name: string; package_line: string; quantity: number; requires_age_check: boolean; min_age: number | null } | null>} */
     const pendingLineRef = useRef(null);
 
-    /** @type {Array<{ line: { medicine_id: number; medicine_name: string; quantity: number; requires_age_check: boolean; min_age: number | null }; allergyMatchedAllergen: string | null; medicine: Record<string, unknown>; customerAge: number }>} */
+    /** @type {Array<{ line: { package_id: number; medicine_id: number; medicine_name: string; package_line: string; quantity: number; requires_age_check: boolean; min_age: number | null }; allergyMatchedAllergen: string | null; medicine: Record<string, unknown>; customerAge: number }>} */
     const [ageCheckQueue, setAgeCheckQueue] = useState([]);
     const currentAgeCheck = ageCheckQueue[0] ?? null;
 
@@ -223,13 +209,12 @@ export default function NewPrescription() {
         (async () => {
             setMedicineSearchLoading(true);
             try {
-                const { data } = await inventoryApi.listInventory({
+                const { data } = await medicinesApi.listPackagePickerRows({
                     search: debouncedMedicineQuery || undefined,
-                    page: 1,
                 });
                 const rows = data.data ?? [];
                 if (!cancelled) {
-                    setMedicineOptions(aggregateMedicineStock(rows));
+                    setMedicineOptions(mapPackagePickerRows(rows));
                 }
             } catch {
                 if (!cancelled) {
@@ -316,8 +301,10 @@ export default function NewPrescription() {
         setLineItems((prev) => [
             ...prev,
             {
+                package_id: line.package_id,
                 medicine_id: line.medicine_id,
                 medicine_name: line.medicine_name,
+                package_line: line.package_line,
                 quantity: line.quantity,
                 requires_age_check: line.requires_age_check,
                 min_age: line.min_age,
@@ -408,30 +395,32 @@ export default function NewPrescription() {
     );
 
     const onAddItemClick = useCallback(() => {
-        const idNum = Number(medicineId);
+        const pkgId = Number(packageId);
         const qty = Number.parseInt(String(medicineQty), 10);
-        if (!idNum || !Number.isFinite(qty) || qty < 1) {
-            toast.error('Select a medicine and enter a valid quantity.');
+        if (!pkgId || !Number.isFinite(qty) || qty < 1) {
+            toast.error('Select a package and enter a valid quantity.');
             return;
         }
-        const opt = medicineOptions.find((m) => m.medicine_id === idNum);
+        const opt = medicineOptions.find((m) => m.package_id === pkgId);
         if (!opt) {
-            toast.error('Medicine not found in current stock list.');
+            toast.error('Package not found in current stock list.');
             return;
         }
         if (qty > opt.stock) {
-            toast.error(`Only ${opt.stock} units available for ${opt.medicine_name}.`);
+            toast.error(`Only ${opt.stock} units available for this package.`);
             return;
         }
         const line = {
-            medicine_id: idNum,
+            package_id: pkgId,
+            medicine_id: opt.medicine_id,
             medicine_name: opt.medicine_name,
+            package_line: opt.line_label,
             quantity: qty,
             requires_age_check: opt.requires_age_check,
             min_age: opt.min_age,
         };
         tryStartAddLine(line, {});
-    }, [medicineId, medicineOptions, medicineQty, tryStartAddLine]);
+    }, [packageId, medicineOptions, medicineQty, tryStartAddLine]);
 
     const onAllergyAcknowledge = useCallback(() => {
         const line = pendingLineRef.current;
@@ -450,7 +439,7 @@ export default function NewPrescription() {
     useEffect(() => {
         setAgeModalIdType('');
         setAgeModalNotes('');
-    }, [currentAgeCheck?.line?.medicine_id]);
+    }, [currentAgeCheck?.line?.package_id]);
 
     const appendVerificationId = useCallback((raw) => {
         const id = raw?.data?.id ?? raw?.id;
@@ -612,7 +601,7 @@ export default function NewPrescription() {
                 customer_id: selectedCustomer.id,
                 notes: notes.trim() || undefined,
                 status: 'dispensed',
-                items: lineItems.map((r) => ({ medicine_id: r.medicine_id, quantity: r.quantity })),
+                items: lineItems.map((r) => ({ package_id: r.package_id, quantity: r.quantity })),
                 acknowledged_allergy_overrides,
             });
             if (status >= 200 && status < 300) {
@@ -663,6 +652,18 @@ export default function NewPrescription() {
         ? String(currentAgeCheck.medicine.age_restriction_notes)
         : '';
     const canActVerified = Boolean(ageModalIdType);
+
+    const medicineOptionGroups = useMemo(() => {
+        /** @type {Map<string, typeof medicineOptions>} */
+        const m = new Map();
+        for (const o of medicineOptions) {
+            if (!m.has(o.medicine_name)) {
+                m.set(o.medicine_name, []);
+            }
+            m.get(o.medicine_name).push(o);
+        }
+        return [...m.entries()];
+    }, [medicineOptions]);
 
     return (
         <div className="mx-auto max-w-3xl space-y-6">
@@ -843,18 +844,26 @@ export default function NewPrescription() {
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="med-pick">Medicine</Label>
+                                <Label htmlFor="med-pick">Medicine and package</Label>
                                 <select
                                     id="med-pick"
                                     className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                                    value={medicineId}
-                                    onChange={(e) => setMedicineId(e.target.value)}
+                                    value={packageId}
+                                    onChange={(e) => setPackageId(e.target.value)}
                                 >
                                     <option value="">Select…</option>
-                                    {medicineOptions.map((m) => (
-                                        <option key={m.medicine_id} value={m.medicine_id}>
-                                            {m.medicine_name} (stock {m.stock})
-                                        </option>
+                                    {medicineOptionGroups.map(([medName, pkgs]) => (
+                                        <optgroup key={medName} label={medName}>
+                                            {pkgs.map((p) => (
+                                                <option
+                                                    key={p.package_id}
+                                                    value={String(p.package_id)}
+                                                    disabled={p.stock <= 0}
+                                                >
+                                                    {p.line_label} — Stock: {p.stock}
+                                                </option>
+                                            ))}
+                                        </optgroup>
                                     ))}
                                 </select>
                             </div>
@@ -894,12 +903,13 @@ export default function NewPrescription() {
                                 <ul className="divide-y divide-border">
                                     {lineItems.map((row, idx) => (
                                         <li
-                                            key={`${row.medicine_id}-${idx}`}
+                                            key={`${row.package_id}-${idx}`}
                                             className="flex flex-col gap-1 px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between"
                                         >
                                             <div className="min-w-0 flex-1 space-y-1">
                                                 <div>
                                                     <span className="font-medium">{row.medicine_name}</span>
+                                                    <span className="text-muted-foreground"> · {row.package_line}</span>
                                                     <span className="text-muted-foreground"> × {row.quantity}</span>
                                                 </div>
                                                 {row.age_check?.outcome === 'verified' ? (
@@ -977,9 +987,9 @@ export default function NewPrescription() {
                             <CardContent className="py-2">
                                 <ul className="space-y-3 text-sm">
                                     {lineItems.map((row, idx) => (
-                                        <li key={`${row.medicine_id}-${idx}`}>
+                                        <li key={`${row.package_id}-${idx}`}>
                                             <div className="font-medium">
-                                                {row.medicine_name} — {row.quantity}
+                                                {row.medicine_name} · {row.package_line} — {row.quantity}
                                             </div>
                                             {row.age_check?.outcome === 'verified' ? (
                                                 <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400">

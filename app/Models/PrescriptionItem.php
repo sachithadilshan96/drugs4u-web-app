@@ -13,7 +13,7 @@ class PrescriptionItem extends Model
 
     protected $fillable = [
         'prescription_id',
-        'medicine_id',
+        'package_id',
         'quantity',
         'dispensed_qty',
     ];
@@ -38,10 +38,17 @@ class PrescriptionItem extends Model
     }
 
     /**
-     * @return BelongsTo<Medicine, $this>
+     * @return BelongsTo<MedicinePackage, $this>
      */
-    public function medicine(): BelongsTo
+    public function package(): BelongsTo
     {
-        return $this->belongsTo(Medicine::class);
+        return $this->belongsTo(MedicinePackage::class, 'package_id');
+    }
+
+    public function resolvedMedicine(): ?Medicine
+    {
+        $this->loadMissing('package.variant.medicine');
+
+        return $this->package?->variant?->medicine;
     }
 }

@@ -77,7 +77,7 @@ class ReportController extends Controller
         ]);
 
         $query = Prescription::query()
-            ->with(['customer:id,full_name,phone,dob', 'pharmacist:id,name', 'items.medicine:id,name']);
+            ->with(['customer:id,full_name,phone,dob', 'pharmacist:id,name', 'items.package.variant.medicine:id,name']);
 
         if (! empty($validated['customer_id'])) {
             $query->where('customer_id', (int) $validated['customer_id']);
@@ -121,8 +121,8 @@ class ReportController extends Controller
         $today = Carbon::today();
 
         $rows = Inventory::query()
-            ->with('medicine')
-            ->orderBy('medicine_id')
+            ->with(['package.variant.medicine', 'supplier'])
+            ->orderBy('package_id')
             ->orderBy('expiry_date')
             ->orderBy('id')
             ->get();
@@ -191,17 +191,23 @@ class ReportController extends Controller
 
         $items = [];
         foreach ($p->items as $item) {
-            $medicineId = (int) $item->medicine_id;
-            $countInWindow = (int) Prescription::query()
-                ->where('customer_id', $p->customer_id)
-                ->whereBetween('created_at', [$start, $end])
-                ->whereHas('items', fn ($q) => $q->where('medicine_id', $medicineId))
-                ->count();
+            $med = $item->resolvedMedicine();
+            $medicineId = (int) ($med?->id ?? 0);
+            $countInWindow = $medicineId > 0
+                ? (int) Prescription::query()
+                    ->where('customer_id', $p->customer_id)
+                    ->whereBetween('created_at', [$start, $end])
+                    ->whereHas('items', function ($q) use ($medicineId) {
+                        $q->whereHas('package.variant', fn ($v) => $v->where('medicine_id', $medicineId));
+                    })
+                    ->count()
+                : 0;
 
             $items[] = [
                 'id' => $item->id,
+                'package_id' => $item->package_id,
                 'medicine_id' => $medicineId,
-                'medicine_name' => $item->relationLoaded('medicine') ? $item->medicine?->name : null,
+                'medicine_name' => $med?->name,
                 'quantity' => (int) $item->quantity,
                 'dispensed_qty' => (int) $item->dispensed_qty,
                 'flagged' => $countInWindow >= 3,
@@ -241,10 +247,15 @@ class ReportController extends Controller
             }
         }
 
+        $inv->loadMissing('package.variant.medicine');
+        $med = $inv->package?->variant?->medicine;
+
         return [
             'id' => $inv->id,
-            'medicine_id' => $inv->medicine_id,
-            'medicine_name' => $inv->medicine?->name,
+            'package_id' => $inv->package_id,
+            'medicine_id' => $med?->id,
+            'medicine_name' => $med?->name,
+            'package_description' => $inv->package?->full_description,
             'quantity' => $qty,
             'expiry_date' => $exp?->toDateString(),
             'status' => $status,

@@ -11,7 +11,8 @@ class Inventory extends Model
     protected $table = 'inventory';
 
     protected $fillable = [
-        'medicine_id',
+        'package_id',
+        'supplier_id',
         'quantity',
         'expiry_date',
     ];
@@ -28,11 +29,29 @@ class Inventory extends Model
     }
 
     /**
-     * @return BelongsTo<Medicine, $this>
+     * @return BelongsTo<MedicinePackage, $this>
      */
-    public function medicine(): BelongsTo
+    public function package(): BelongsTo
     {
-        return $this->belongsTo(Medicine::class);
+        return $this->belongsTo(MedicinePackage::class, 'package_id');
+    }
+
+    /**
+     * @return BelongsTo<Supplier, $this>
+     */
+    public function supplier(): BelongsTo
+    {
+        return $this->belongsTo(Supplier::class);
+    }
+
+    public function getMedicineAttribute(): ?Medicine
+    {
+        if (! $this->package_id) {
+            return null;
+        }
+        $this->loadMissing('package.variant.medicine');
+
+        return $this->package?->variant?->medicine;
     }
 
     /**

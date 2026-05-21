@@ -15,7 +15,7 @@ export function getInventoryRow(id) {
 }
 
 /**
- * @param {{ medicine_id: number; quantity: number; expiry_date: string }} data
+ * @param {{ package_id: number; supplier_id?: number | null; quantity: number; expiry_date: string }} data
  */
 export function createInventoryRow(data) {
     return api.post('/inventory', data);
