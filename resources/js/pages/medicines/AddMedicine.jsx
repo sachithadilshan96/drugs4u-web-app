@@ -70,6 +70,8 @@ export default function AddMedicine() {
     const [rxResults, setRxResults] = useState([]);
     const [rxSuggestions, setRxSuggestions] = useState([]);
     const [selectedRx, setSelectedRx] = useState(null);
+    /** After double-click confirm, hide the results list until the search query changes. */
+    const [rxResultsDismissed, setRxResultsDismissed] = useState(false);
 
     const [baseName, setBaseName] = useState('');
     const [strength, setStrength] = useState('');
@@ -78,7 +80,6 @@ export default function AddMedicine() {
     const [rxcui, setRxcui] = useState('');
 
     const [brandName, setBrandName] = useState('');
-    const [manufacturer, setManufacturer] = useState('');
     const [packages, setPackages] = useState([emptyPackage()]);
 
     const [requiresAge, setRequiresAge] = useState(false);
@@ -102,6 +103,7 @@ export default function AddMedicine() {
         if (q.length < 2) {
             setRxResults([]);
             setRxSuggestions([]);
+            setRxResultsDismissed(false);
             return;
         }
         let cancelled = false;
@@ -114,10 +116,12 @@ export default function AddMedicine() {
                 }
                 setRxResults(data.data ?? []);
                 setRxSuggestions(data.suggestions ?? []);
+                setRxResultsDismissed(false);
             } catch {
                 if (!cancelled) {
                     setRxResults([]);
                     setRxSuggestions([]);
+                    setRxResultsDismissed(false);
                 }
             } finally {
                 if (!cancelled) {
@@ -165,6 +169,9 @@ export default function AddMedicine() {
         setForm(row.form || '');
         setRoute(row.route || '');
         setRxcui(row.rxcui || '');
+        const fromApi = row.brand_name != null && String(row.brand_name).trim() !== '' ? String(row.brand_name).trim() : '';
+        const fromBase = row.base_name != null && String(row.base_name).trim() !== '' ? String(row.base_name).trim() : '';
+        setBrandName(fromApi || fromBase || '');
     };
 
     const addPackageRow = () => setPackages((p) => [...p, emptyPackage()]);
@@ -227,7 +234,7 @@ export default function AddMedicine() {
             variants: [
                 {
                     brand_name: brandName.trim() || null,
-                    manufacturer: manufacturer.trim() || null,
+                    manufacturer: null,
                     strength: strength.trim(),
                     form: form.trim(),
                     route: route.trim() || null,
@@ -285,7 +292,9 @@ export default function AddMedicine() {
 
             <div>
                 <h1 className="font-heading text-2xl font-semibold tracking-tight">Add medicine</h1>
-                <p className="mt-1 text-sm text-muted-foreground">Guided setup with RxNorm lookup, packaging, and suppliers.</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                    Guided setup with RxNorm branded-formulation lookup, packaging, and suppliers.
+                </p>
             </div>
 
             <div className="flex gap-2">
@@ -307,7 +316,10 @@ export default function AddMedicine() {
                 <Card>
                     <CardHeader>
                         <CardTitle>Clinical formulation</CardTitle>
-                        <CardDescription>Search for the active ingredient and strength, or enter manually.</CardDescription>
+                        <CardDescription>
+                            Search returns up to 50 branded products (RxNorm SBD). Single-click selects a row; double-click selects and hides the
+                            list. Change the search text to show results again. You can also enter details manually.
+                        </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-6">
                         {!manualMode ? (
@@ -337,16 +349,27 @@ export default function AddMedicine() {
                                         </AlertDescription>
                                     </Alert>
                                 ) : null}
-                                <div className="space-y-2">
+                                {!rxResultsDismissed && rxResults.length > 0 ? (
+                                <div
+                                    className="max-h-[min(24rem,55vh)] space-y-2 overflow-y-auto overflow-x-hidden rounded-md border border-border bg-muted/20 p-2 [-webkit-overflow-scrolling:touch]"
+                                    role="listbox"
+                                    aria-label="RxNorm search results"
+                                >
                                     {rxResults.map((row) => (
                                         <button
                                             key={`${row.rxcui}-${row.raw_name}`}
                                             type="button"
+                                            role="option"
                                             onClick={() => pickRx(row)}
+                                            onDoubleClick={(e) => {
+                                                e.preventDefault();
+                                                pickRx(row);
+                                                setRxResultsDismissed(true);
+                                            }}
                                             className={`w-full rounded-lg border p-4 text-left transition-colors ${
                                                 selectedRx?.rxcui === row.rxcui && selectedRx?.raw_name === row.raw_name
                                                     ? 'border-teal-500 bg-teal-950/20'
-                                                    : 'border-border hover:bg-muted/50'
+                                                    : 'border-border bg-background hover:bg-muted/50'
                                             }`}
                                         >
                                             <p className="font-semibold">{row.raw_name}</p>
@@ -362,16 +385,15 @@ export default function AddMedicine() {
                                                     </Badge>
                                                 ) : null}
                                                 {row.route ? <Badge variant="secondary">{row.route}</Badge> : null}
-                                                {row.is_branded ? (
-                                                    <Badge variant="outline" className="border-amber-500 text-amber-700">
-                                                        Branded
-                                                    </Badge>
-                                                ) : null}
+                                                <Badge variant="outline" className="border-amber-500 text-amber-700">
+                                                    Branded
+                                                </Badge>
                                             </div>
                                             <p className="mt-2 text-xs text-muted-foreground">RxCUI {row.rxcui}</p>
                                         </button>
                                     ))}
                                 </div>
+                                ) : null}
                             </>
                         ) : null}
 
@@ -384,6 +406,8 @@ export default function AddMedicine() {
                                 if (!manualMode) {
                                     setRxResults([]);
                                     setRxQuery('');
+                                    setRxResultsDismissed(false);
+                                    setBrandName('');
                                 }
                             }}
                         >
@@ -419,7 +443,17 @@ export default function AddMedicine() {
                         </div>
 
                         <div className="flex justify-end">
-                            <Button type="button" disabled={!step1Valid} className="gap-1 bg-teal-600 text-white" onClick={() => setCurrentStep(2)}>
+                            <Button
+                                type="button"
+                                disabled={!step1Valid}
+                                className="gap-1 bg-teal-600 text-white"
+                                onClick={() => {
+                                    if (!manualMode && !selectedRx) {
+                                        setBrandName('');
+                                    }
+                                    setCurrentStep(2);
+                                }}
+                            >
                                 Next
                                 <ChevronRight className="size-4" />
                             </Button>
@@ -432,32 +466,37 @@ export default function AddMedicine() {
                 <Card>
                     <CardHeader>
                         <CardTitle>Branded product</CardTitle>
-                        <CardDescription>Define the brand and physical packaging.</CardDescription>
+                        <CardDescription>
+                            Brand is filled from your RxNorm selection when you use search (trade name in brackets, or the leading name before
+                            strength). You can edit or clear it. Describe how the product is actually supplied below.
+                        </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-8">
-                        <div className="grid gap-4 sm:grid-cols-2">
-                            <div className="space-y-2">
-                                <Label>Brand name</Label>
-                                <Input
-                                    value={brandName}
-                                    onChange={(e) => setBrandName(e.target.value)}
-                                    placeholder="e.g. Nurofen, Advil — leave blank for generic"
-                                />
-                                <p className="text-xs text-muted-foreground">Leave blank if this is an unbranded generic product.</p>
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Manufacturer</Label>
-                                <Input
-                                    value={manufacturer}
-                                    onChange={(e) => setManufacturer(e.target.value)}
-                                    placeholder="e.g. Reckitt Benckiser, Teva Pharmaceuticals"
-                                />
-                            </div>
+                        <div className="space-y-2">
+                            <Label>Brand name</Label>
+                            <Input
+                                value={brandName}
+                                onChange={(e) => setBrandName(e.target.value)}
+                                placeholder="e.g. Nurofen, Advil — clear for unbranded / generic-style stock"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                RxNorm search only lists branded (SBD) concepts, so this field is pre-filled when you pick a result. Clear it if you
+                                are recording a generic line with no trade name.
+                            </p>
                         </div>
 
                         <div>
                             <h3 className="text-lg font-semibold">Package options</h3>
                             <p className="text-sm text-muted-foreground">Add one or more package sizes available for this medicine.</p>
+                            <Alert className="mt-3 border-teal-500/30 bg-teal-950/15">
+                                <AlertTitle className="text-sm">About package description</AlertTitle>
+                                <AlertDescription className="text-xs leading-relaxed text-muted-foreground">
+                                    Describe the <span className="font-medium text-foreground">sellable unit</span> staff will pick in inventory
+                                    and on prescriptions — for example blister pack size, bottle volume, or tube weight. This should match what is
+                                    on the shelf label and helps distinguish two packs of the same strength (e.g. 14 tablets vs 28 tablets). Use the
+                                    quick suggestions under each field where they match your formulation.
+                                </AlertDescription>
+                            </Alert>
                             <div className="mt-4 space-y-6">
                                 {packages.map((p, idx) => (
                                     <Card key={idx} className="border-dashed">
