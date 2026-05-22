@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Plus, Search } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, Plus, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import * as inventoryApi from '@/api/inventory';
 import * as medicinesApi from '@/api/medicines';
@@ -13,7 +13,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-import { cn } from '@/lib/utils';
 
 function formatDate(iso) {
     if (!iso) {
@@ -67,6 +66,14 @@ function statusForRow(row) {
     return { label: 'OK', className: 'border-emerald-500/50 bg-emerald-950/40 text-emerald-100' };
 }
 
+/** Stable group key for inventory rows (current page). */
+function medicineGroupKey(row) {
+    if (row.medicine_id != null) {
+        return `id:${row.medicine_id}`;
+    }
+    return `name:${(row.medicine_name ?? '').trim() || 'unknown'}`;
+}
+
 export default function InventoryList() {
     useDocumentTitle('Inventory');
 
@@ -92,10 +99,49 @@ export default function InventoryList() {
     const [addDialogOpen, setAddDialogOpen] = useState(false);
     const [medicineOptions, setMedicineOptions] = useState([]);
     const [newPackageId, setNewPackageId] = useState('');
-    const [packageSearch, setPackageSearch] = useState('');
+    const [packageQuery, setPackageQuery] = useState('');
+    const [packageSelectedLabel, setPackageSelectedLabel] = useState('');
+    const [packagePickerOpen, setPackagePickerOpen] = useState(false);
     const [newQty, setNewQty] = useState('1');
     const [newExpiry, setNewExpiry] = useState('');
     const [creating, setCreating] = useState(false);
+
+    const [expandedMedicineKeys, setExpandedMedicineKeys] = useState(() => new Set());
+
+    const inventoryGrouped = useMemo(() => {
+        const map = new Map();
+        for (const row of rows) {
+            const key = medicineGroupKey(row);
+            if (!map.has(key)) {
+                map.set(key, {
+                    key,
+                    medicineId: row.medicine_id,
+                    medicineName: row.medicine_name?.trim() || 'Unknown product',
+                    items: [],
+                });
+            }
+            map.get(key).items.push(row);
+        }
+        return Array.from(map.values()).sort((a, b) =>
+            a.medicineName.localeCompare(b.medicineName, 'en-GB', { sensitivity: 'base' }),
+        );
+    }, [rows]);
+
+    const toggleMedicineGroup = useCallback((key) => {
+        setExpandedMedicineKeys((prev) => {
+            const next = new Set(prev);
+            if (next.has(key)) {
+                next.delete(key);
+            } else {
+                next.add(key);
+            }
+            return next;
+        });
+    }, []);
+
+    useEffect(() => {
+        setExpandedMedicineKeys(new Set());
+    }, [page, debouncedSearch]);
 
     useEffect(() => {
         const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
@@ -135,7 +181,7 @@ export default function InventoryList() {
     }, [load]);
 
     const filteredPackageOptions = useMemo(() => {
-        const t = packageSearch.trim().toLowerCase();
+        const t = packageQuery.trim().toLowerCase();
         if (!t) {
             return medicineOptions;
         }
@@ -143,14 +189,17 @@ export default function InventoryList() {
             const blob = `${m.medicine_name ?? ''} ${m.line_label ?? ''} ${m.package_id}`.toLowerCase();
             return blob.includes(t);
         });
-    }, [medicineOptions, packageSearch]);
+    }, [medicineOptions, packageQuery]);
 
     const loadMedicinesForPicker = useCallback(async () => {
         try {
             const { data } = await medicinesApi.listMedicinesForInventoryPicker();
-            setMedicineOptions(data.data ?? []);
+            const list = data.data ?? [];
+            setMedicineOptions(list);
+            return list;
         } catch {
             setMedicineOptions([]);
+            return [];
         }
     }, []);
 
@@ -203,9 +252,18 @@ export default function InventoryList() {
 
     const openAddInventoryDialog = useCallback(
         async (preselectPackageId) => {
-            await loadMedicinesForPicker();
-            setNewPackageId(preselectPackageId != null && preselectPackageId !== '' ? String(preselectPackageId) : '');
-            setPackageSearch('');
+            const list = await loadMedicinesForPicker();
+            setPackageQuery('');
+            setPackagePickerOpen(false);
+            if (preselectPackageId != null && preselectPackageId !== '') {
+                const pre = String(preselectPackageId);
+                const m = list.find((x) => String(x.package_id) === pre);
+                setNewPackageId(m ? pre : '');
+                setPackageSelectedLabel(m ? `${m.medicine_name} — ${m.line_label}` : '');
+            } else {
+                setNewPackageId('');
+                setPackageSelectedLabel('');
+            }
             setNewQty('1');
             setNewExpiry('');
             setAddDialogOpen(true);
@@ -276,7 +334,8 @@ export default function InventoryList() {
                 <CardHeader>
                     <CardTitle>Stock list</CardTitle>
                     <CardDescription>
-                        Search by medicine name, package description, or unit. Use pagination to browse all batches.
+                        Search by medicine name, package description, or unit. Stock is grouped by product; expand a row to see
+                        each package batch on this page.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -336,28 +395,94 @@ export default function InventoryList() {
                                     </TableCell>
                                 </TableRow>
                             ) : (
-                                rows.map((row) => {
-                                    const status = statusForRow(row);
-                                    const tinted = status.label === 'LOW STOCK' || status.label === 'EXPIRED';
-                                    const pkgLabel = row.package_detail ?? row.package_description ?? '—';
+                                inventoryGrouped.map((group) => {
+                                    const isOpen = expandedMedicineKeys.has(group.key);
+                                    const packageIds = new Set(group.items.map((r) => r.package_id));
+                                    const pkgCount = packageIds.size;
+                                    const batchCount = group.items.length;
+                                    const totalQty = group.items.reduce((s, r) => s + Number(r.quantity ?? 0), 0);
+
                                     return (
-                                        <TableRow key={row.id} className={tinted ? 'bg-red-50/60 dark:bg-red-950/20' : undefined}>
-                                            <TableCell className="font-medium">{row.medicine_name ?? '—'}</TableCell>
-                                            <TableCell className="max-w-[14rem] text-sm text-muted-foreground">{pkgLabel}</TableCell>
-                                            <TableCell className="whitespace-nowrap text-sm">{row.package_unit ?? '—'}</TableCell>
-                                            <TableCell>{row.quantity}</TableCell>
-                                            <TableCell>{formatDate(row.expiry_date)}</TableCell>
-                                            <TableCell>
-                                                <Badge variant="outline" className={status.className}>
-                                                    {status.label}
-                                                </Badge>
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                <Button type="button" variant="outline" size="sm" onClick={() => openStockModal(row)}>
-                                                    Add Stock
-                                                </Button>
-                                            </TableCell>
-                                        </TableRow>
+                                        <Fragment key={group.key}>
+                                            <TableRow className="bg-muted/35 hover:bg-muted/50 border-b border-border">
+                                                <TableCell className="py-3 align-middle">
+                                                    <button
+                                                        type="button"
+                                                        className="flex w-full max-w-full items-center gap-2 rounded-md text-left font-heading text-base font-semibold text-teal-800 outline-offset-2 hover:text-teal-700 focus-visible:ring-2 focus-visible:ring-teal-500/40 dark:text-teal-200 dark:hover:text-teal-100"
+                                                        aria-expanded={isOpen}
+                                                        aria-controls={isOpen ? `stock-group-${group.key}` : undefined}
+                                                        id={`stock-group-trigger-${group.key}`}
+                                                        onClick={() => toggleMedicineGroup(group.key)}
+                                                    >
+                                                        {isOpen ? (
+                                                            <ChevronDown className="size-4 shrink-0 opacity-80" aria-hidden />
+                                                        ) : (
+                                                            <ChevronRight className="size-4 shrink-0 opacity-80" aria-hidden />
+                                                        )}
+                                                        <span className="min-w-0 truncate">{group.medicineName}</span>
+                                                    </button>
+                                                </TableCell>
+                                                <TableCell colSpan={6} className="py-3 align-middle text-sm text-muted-foreground">
+                                                    <span className="hidden sm:inline">
+                                                        {pkgCount} package{pkgCount === 1 ? '' : 's'} · {batchCount} batch
+                                                        {batchCount === 1 ? '' : 'es'} · {totalQty} units
+                                                    </span>
+                                                    <span className="sm:hidden">
+                                                        {pkgCount} pkg · {batchCount} lines · {totalQty} u
+                                                    </span>
+                                                    <span className="ml-2 text-xs opacity-80">{isOpen ? 'Hide' : 'Show'} lines</span>
+                                                </TableCell>
+                                            </TableRow>
+                                            {isOpen
+                                                ? group.items.map((row) => {
+                                                      const status = statusForRow(row);
+                                                      const tinted =
+                                                          status.label === 'LOW STOCK' || status.label === 'EXPIRED';
+                                                      const pkgLabel =
+                                                          row.package_detail ?? row.package_description ?? '—';
+                                                      return (
+                                                          <TableRow
+                                                              key={row.id}
+                                                              id={
+                                                                  group.items[0] === row
+                                                                      ? `stock-group-${group.key}`
+                                                                      : undefined
+                                                              }
+                                                              className={
+                                                                  tinted
+                                                                      ? 'border-l-2 border-l-teal-600/40 bg-red-50/60 dark:bg-red-950/20'
+                                                                      : 'border-l-2 border-l-teal-600/25 bg-background'
+                                                              }
+                                                          >
+                                                              <TableCell className="pl-10 text-muted-foreground" />
+                                                              <TableCell className="max-w-[14rem] text-sm text-foreground">
+                                                                  {pkgLabel}
+                                                              </TableCell>
+                                                              <TableCell className="whitespace-nowrap text-sm">
+                                                                  {row.package_unit ?? '—'}
+                                                              </TableCell>
+                                                              <TableCell>{row.quantity}</TableCell>
+                                                              <TableCell>{formatDate(row.expiry_date)}</TableCell>
+                                                              <TableCell>
+                                                                  <Badge variant="outline" className={status.className}>
+                                                                      {status.label}
+                                                                  </Badge>
+                                                              </TableCell>
+                                                              <TableCell className="text-right">
+                                                                  <Button
+                                                                      type="button"
+                                                                      variant="outline"
+                                                                      size="sm"
+                                                                      onClick={() => openStockModal(row)}
+                                                                  >
+                                                                      Add Stock
+                                                                  </Button>
+                                                              </TableCell>
+                                                          </TableRow>
+                                                      );
+                                                  })
+                                                : null}
+                                        </Fragment>
                                     );
                                 })
                             )}
@@ -490,57 +615,70 @@ export default function InventoryList() {
                     <div className="space-y-4">
                         <div className="space-y-2">
                             <Label htmlFor="pkg-search">Package</Label>
-                            <p className="text-xs text-muted-foreground">Search the catalogue by medicine name, formulation line, or package ID, then select a row.</p>
+                            <p className="text-xs text-muted-foreground">
+                                Click the field to open the list, type to filter, then choose a line. The field shows your selection; click again to
+                                search and change.
+                            </p>
                             <div className="relative">
                                 <Input
                                     id="pkg-search"
-                                    value={packageSearch}
-                                    onChange={(e) => setPackageSearch(e.target.value)}
-                                    placeholder="Type to search…"
+                                    value={packagePickerOpen ? packageQuery : packageSelectedLabel}
+                                    onChange={(e) => {
+                                        setPackageQuery(e.target.value);
+                                        setPackagePickerOpen(true);
+                                    }}
+                                    onFocus={() => {
+                                        setPackagePickerOpen(true);
+                                        setPackageQuery('');
+                                    }}
+                                    onBlur={() => {
+                                        window.setTimeout(() => setPackagePickerOpen(false), 200);
+                                    }}
+                                    placeholder="Click to search and select a package…"
                                     className="pr-9"
                                     autoComplete="off"
+                                    role="combobox"
+                                    aria-expanded={packagePickerOpen}
+                                    aria-controls="package-catalogue-list"
                                 />
                                 <Search className="pointer-events-none absolute top-1/2 right-2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
                             </div>
-                            <div
-                                className="max-h-52 overflow-y-auto overflow-x-hidden rounded-md border border-border bg-muted/20"
-                                role="listbox"
-                                aria-label="Package catalogue"
-                            >
-                                {filteredPackageOptions.length === 0 ? (
-                                    <p className="p-3 text-sm text-muted-foreground">No packages match. Clear the search or type another term.</p>
-                                ) : (
-                                    filteredPackageOptions.map((m) => {
-                                        const idStr = String(m.package_id);
-                                        const selected = newPackageId === idStr;
-                                        return (
-                                            <button
-                                                key={m.package_id}
-                                                type="button"
-                                                role="option"
-                                                className={cn(
-                                                    'flex w-full flex-col items-start border-b border-border px-3 py-2.5 text-left text-sm last:border-0',
-                                                    'hover:bg-muted/80',
-                                                    selected && 'bg-teal-950/30 ring-1 ring-inset ring-teal-500/50',
-                                                )}
-                                                onClick={() => {
-                                                    setNewPackageId(idStr);
-                                                    setPackageSearch('');
-                                                }}
-                                            >
-                                                <span className="font-medium text-foreground">{m.medicine_name}</span>
-                                                <span className="text-xs text-muted-foreground">
-                                                    {m.line_label} · ID {m.package_id}
-                                                </span>
-                                            </button>
-                                        );
-                                    })
-                                )}
-                            </div>
-                            {newPackageId ? (
-                                <p className="text-xs text-muted-foreground">
-                                    Selected package ID <span className="font-mono text-foreground">{newPackageId}</span>
-                                </p>
+                            {packagePickerOpen ? (
+                                <div
+                                    id="package-catalogue-list"
+                                    className="max-h-52 overflow-y-auto overflow-x-hidden rounded-md border border-border bg-muted/20"
+                                    role="listbox"
+                                    aria-label="Package catalogue"
+                                >
+                                    {filteredPackageOptions.length === 0 ? (
+                                        <p className="p-3 text-sm text-muted-foreground">No packages match. Clear the search or type another term.</p>
+                                    ) : (
+                                        filteredPackageOptions.map((m) => {
+                                            const idStr = String(m.package_id);
+                                            const label = `${m.medicine_name} — ${m.line_label}`;
+                                            return (
+                                                <button
+                                                    key={m.package_id}
+                                                    type="button"
+                                                    role="option"
+                                                    className="flex w-full flex-col items-start border-b border-border px-3 py-2.5 text-left text-sm last:border-0 hover:bg-muted/80"
+                                                    onMouseDown={(e) => e.preventDefault()}
+                                                    onClick={() => {
+                                                        setNewPackageId(idStr);
+                                                        setPackageSelectedLabel(label);
+                                                        setPackageQuery('');
+                                                        setPackagePickerOpen(false);
+                                                    }}
+                                                >
+                                                    <span className="font-medium text-foreground">{m.medicine_name}</span>
+                                                    <span className="text-xs text-muted-foreground">
+                                                        {m.line_label} · ID {m.package_id}
+                                                    </span>
+                                                </button>
+                                            );
+                                        })
+                                    )}
+                                </div>
                             ) : null}
                         </div>
                         <div className="space-y-2">
