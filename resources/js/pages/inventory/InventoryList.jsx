@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, Search } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import * as inventoryApi from '@/api/inventory';
 import * as medicinesApi from '@/api/medicines';
@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
 
 function formatDate(iso) {
     if (!iso) {
@@ -77,7 +78,10 @@ export default function InventoryList() {
 
     const [loading, setLoading] = useState(true);
     const [rows, setRows] = useState([]);
+    const [meta, setMeta] = useState(null);
     const [search, setSearch] = useState('');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
+    const [page, setPage] = useState(1);
 
     const [stockModalOpen, setStockModalOpen] = useState(false);
     const [stockTarget, setStockTarget] = useState(null);
@@ -88,29 +92,58 @@ export default function InventoryList() {
     const [addDialogOpen, setAddDialogOpen] = useState(false);
     const [medicineOptions, setMedicineOptions] = useState([]);
     const [newPackageId, setNewPackageId] = useState('');
+    const [packageSearch, setPackageSearch] = useState('');
     const [newQty, setNewQty] = useState('1');
     const [newExpiry, setNewExpiry] = useState('');
     const [creating, setCreating] = useState(false);
+
+    useEffect(() => {
+        const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+        return () => clearTimeout(t);
+    }, [search]);
+
+    useEffect(() => {
+        setPage(1);
+    }, [debouncedSearch]);
 
     const load = useCallback(async () => {
         setLoading(true);
         try {
             const { data } = await inventoryApi.listInventory({
-                page: 1,
-                search: search.trim() || undefined,
+                page,
+                search: debouncedSearch || undefined,
             });
             setRows(data.data ?? []);
+            setMeta({
+                current_page: data.current_page,
+                last_page: data.last_page,
+                from: data.from,
+                to: data.to,
+                total: data.total,
+            });
         } catch (e) {
             toast.error(e.response?.data?.message ?? 'Could not load inventory.');
             setRows([]);
+            setMeta(null);
         } finally {
             setLoading(false);
         }
-    }, [search]);
+    }, [page, debouncedSearch]);
 
     useEffect(() => {
         void load();
     }, [load]);
+
+    const filteredPackageOptions = useMemo(() => {
+        const t = packageSearch.trim().toLowerCase();
+        if (!t) {
+            return medicineOptions;
+        }
+        return medicineOptions.filter((m) => {
+            const blob = `${m.medicine_name ?? ''} ${m.line_label ?? ''} ${m.package_id}`.toLowerCase();
+            return blob.includes(t);
+        });
+    }, [medicineOptions, packageSearch]);
 
     const loadMedicinesForPicker = useCallback(async () => {
         try {
@@ -169,9 +202,10 @@ export default function InventoryList() {
     }, [load, stockTarget, updateQty, updateType]);
 
     const openAddInventoryDialog = useCallback(
-        async (preselectMedicineId) => {
+        async (preselectPackageId) => {
             await loadMedicinesForPicker();
-            setNewPackageId(preselectMedicineId != null && preselectMedicineId !== '' ? String(preselectMedicineId) : '');
+            setNewPackageId(preselectPackageId != null && preselectPackageId !== '' ? String(preselectPackageId) : '');
+            setPackageSearch('');
             setNewQty('1');
             setNewExpiry('');
             setAddDialogOpen(true);
@@ -241,7 +275,9 @@ export default function InventoryList() {
             <Card>
                 <CardHeader>
                     <CardTitle>Stock list</CardTitle>
-                    <CardDescription>Search inventory and update stock movements.</CardDescription>
+                    <CardDescription>
+                        Search by medicine name, package description, or unit. Use pagination to browse all batches.
+                    </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <div className="relative max-w-md">
@@ -249,7 +285,7 @@ export default function InventoryList() {
                         <Input
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
-                            placeholder="Search by medicine name"
+                            placeholder="Search medicine, package, or unit…"
                             className="pl-9"
                         />
                     </div>
@@ -258,6 +294,8 @@ export default function InventoryList() {
                         <TableHeader>
                             <TableRow>
                                 <TableHead>Product</TableHead>
+                                <TableHead>Package</TableHead>
+                                <TableHead>Unit</TableHead>
                                 <TableHead>Quantity</TableHead>
                                 <TableHead>Expiry Date</TableHead>
                                 <TableHead>Status</TableHead>
@@ -270,6 +308,12 @@ export default function InventoryList() {
                                     <TableRow key={i}>
                                         <TableCell>
                                             <Skeleton className="h-4 w-40" />
+                                        </TableCell>
+                                        <TableCell>
+                                            <Skeleton className="h-4 w-36" />
+                                        </TableCell>
+                                        <TableCell>
+                                            <Skeleton className="h-4 w-16" />
                                         </TableCell>
                                         <TableCell>
                                             <Skeleton className="h-4 w-12" />
@@ -287,20 +331,20 @@ export default function InventoryList() {
                                 ))
                             ) : rows.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={5} className="h-20 text-center text-muted-foreground">No inventory rows found.</TableCell>
+                                    <TableCell colSpan={7} className="h-20 text-center text-muted-foreground">
+                                        No inventory rows found.
+                                    </TableCell>
                                 </TableRow>
                             ) : (
                                 rows.map((row) => {
                                     const status = statusForRow(row);
                                     const tinted = status.label === 'LOW STOCK' || status.label === 'EXPIRED';
+                                    const pkgLabel = row.package_detail ?? row.package_description ?? '—';
                                     return (
                                         <TableRow key={row.id} className={tinted ? 'bg-red-50/60 dark:bg-red-950/20' : undefined}>
-                                            <TableCell className="font-medium">
-                                                <div>{row.medicine_name ?? '—'}</div>
-                                                {row.package_description ? (
-                                                    <div className="text-xs text-muted-foreground">{row.package_description}</div>
-                                                ) : null}
-                                            </TableCell>
+                                            <TableCell className="font-medium">{row.medicine_name ?? '—'}</TableCell>
+                                            <TableCell className="max-w-[14rem] text-sm text-muted-foreground">{pkgLabel}</TableCell>
+                                            <TableCell className="whitespace-nowrap text-sm">{row.package_unit ?? '—'}</TableCell>
                                             <TableCell>{row.quantity}</TableCell>
                                             <TableCell>{formatDate(row.expiry_date)}</TableCell>
                                             <TableCell>
@@ -319,6 +363,41 @@ export default function InventoryList() {
                             )}
                         </TableBody>
                     </Table>
+
+                    {!loading && rows.length > 0 && meta ? (
+                        <div className="flex flex-col items-center justify-between gap-3 border-t border-border pt-4 sm:flex-row">
+                            <p className="text-sm text-muted-foreground">
+                                Showing {meta.from ?? 0}–{meta.to ?? 0} of {meta.total ?? 0}
+                            </p>
+                            <div className="flex items-center gap-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={(meta.current_page ?? 1) <= 1}
+                                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                                    className="gap-1"
+                                >
+                                    <ChevronLeft className="size-4" aria-hidden />
+                                    Previous
+                                </Button>
+                                <span className="min-w-[5rem] text-center text-sm text-muted-foreground">
+                                    Page {meta.current_page ?? 1} of {meta.last_page ?? 1}
+                                </span>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={(meta.current_page ?? 1) >= (meta.last_page ?? 1)}
+                                    onClick={() => setPage((p) => p + 1)}
+                                    className="gap-1"
+                                >
+                                    Next
+                                    <ChevronRight className="size-4" aria-hidden />
+                                </Button>
+                            </div>
+                        </div>
+                    ) : null}
                 </CardContent>
             </Card>
 
@@ -410,20 +489,59 @@ export default function InventoryList() {
                     </DialogHeader>
                     <div className="space-y-4">
                         <div className="space-y-2">
-                            <Label htmlFor="new-med">Package</Label>
-                            <select
-                                id="new-med"
-                                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                                value={newPackageId}
-                                onChange={(e) => setNewPackageId(e.target.value)}
+                            <Label htmlFor="pkg-search">Package</Label>
+                            <p className="text-xs text-muted-foreground">Search the catalogue by medicine name, formulation line, or package ID, then select a row.</p>
+                            <div className="relative">
+                                <Input
+                                    id="pkg-search"
+                                    value={packageSearch}
+                                    onChange={(e) => setPackageSearch(e.target.value)}
+                                    placeholder="Type to search…"
+                                    className="pr-9"
+                                    autoComplete="off"
+                                />
+                                <Search className="pointer-events-none absolute top-1/2 right-2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                            </div>
+                            <div
+                                className="max-h-52 overflow-y-auto overflow-x-hidden rounded-md border border-border bg-muted/20"
+                                role="listbox"
+                                aria-label="Package catalogue"
                             >
-                                <option value="">Select package…</option>
-                                {medicineOptions.map((m) => (
-                                    <option key={m.package_id} value={String(m.package_id)}>
-                                        {m.medicine_name} — {m.line_label}
-                                    </option>
-                                ))}
-                            </select>
+                                {filteredPackageOptions.length === 0 ? (
+                                    <p className="p-3 text-sm text-muted-foreground">No packages match. Clear the search or type another term.</p>
+                                ) : (
+                                    filteredPackageOptions.map((m) => {
+                                        const idStr = String(m.package_id);
+                                        const selected = newPackageId === idStr;
+                                        return (
+                                            <button
+                                                key={m.package_id}
+                                                type="button"
+                                                role="option"
+                                                className={cn(
+                                                    'flex w-full flex-col items-start border-b border-border px-3 py-2.5 text-left text-sm last:border-0',
+                                                    'hover:bg-muted/80',
+                                                    selected && 'bg-teal-950/30 ring-1 ring-inset ring-teal-500/50',
+                                                )}
+                                                onClick={() => {
+                                                    setNewPackageId(idStr);
+                                                    setPackageSearch('');
+                                                }}
+                                            >
+                                                <span className="font-medium text-foreground">{m.medicine_name}</span>
+                                                <span className="text-xs text-muted-foreground">
+                                                    {m.line_label} · ID {m.package_id}
+                                                </span>
+                                            </button>
+                                        );
+                                    })
+                                )}
+                            </div>
+                            {newPackageId ? (
+                                <p className="text-xs text-muted-foreground">
+                                    Selected package ID <span className="font-mono text-foreground">{newPackageId}</span>
+                                </p>
+                            ) : null}
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="new-qty">Quantity</Label>
