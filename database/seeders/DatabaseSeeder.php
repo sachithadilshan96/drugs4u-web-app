@@ -117,6 +117,7 @@ class DatabaseSeeder extends Seeder
 
                 $variant = MedicineVariant::query()->create([
                     'medicine_id' => $medicine->id,
+                    'supplier_id' => $supplierAlliance->id,
                     'brand_name' => null,
                     'manufacturer' => null,
                     'strength' => $spec['strength'],
@@ -127,6 +128,7 @@ class DatabaseSeeder extends Seeder
 
                 $package = MedicinePackage::query()->create([
                     'variant_id' => $variant->id,
+                    'supplier_id' => $variant->supplier_id,
                     'package_description' => $spec['pkg'],
                     'package_size' => $spec['size'],
                     'package_unit' => $spec['unit'],

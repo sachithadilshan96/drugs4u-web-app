@@ -236,8 +236,13 @@ export default function AddMedicine() {
             toast.error('Complete required fields.');
             return;
         }
+        if (linkedSuppliers.length === 0) {
+            toast.error('Select at least one supplier. Variants and packages require a supplier.');
+            return;
+        }
         setSubmitting(true);
         const preferred = linkedSuppliers.find((s) => s.is_preferred);
+        const variantSupplierId = preferred?.id ?? linkedSuppliers[0]?.id ?? null;
         const body = {
             name: baseName.trim(),
             rxcui: rxcui.trim() || null,
@@ -247,6 +252,7 @@ export default function AddMedicine() {
             age_restriction_notes: requiresAge ? (ageNotes.trim() || null) : null,
             variants: [
                 {
+                    supplier_id: variantSupplierId,
                     brand_name: brandName.trim() || null,
                     manufacturer: null,
                     strength: strength.trim(),
@@ -254,6 +260,7 @@ export default function AddMedicine() {
                     route: route.trim() || null,
                     rxcui_variant: selectedRx?.is_branded ? (selectedRx?.rxcui ?? null) : null,
                     packages: packages.map((p) => ({
+                        supplier_id: variantSupplierId,
                         package_description: p.package_description.trim(),
                         package_size: Number.parseInt(p.package_size, 10),
                         package_unit: p.package_unit,
@@ -262,7 +269,7 @@ export default function AddMedicine() {
                 },
             ],
             supplier_ids: linkedSuppliers.map((s) => s.id),
-            preferred_supplier_id: preferred?.id ?? null,
+            preferred_supplier_id: variantSupplierId,
         };
 
         try {
@@ -692,7 +699,9 @@ export default function AddMedicine() {
                 <Card>
                     <CardHeader>
                         <CardTitle>Suppliers</CardTitle>
-                        <CardDescription>Link one or more suppliers for this medicine.</CardDescription>
+                        <CardDescription>
+                            Link at least one supplier. Variants and packages are mapped to the preferred supplier selected here.
+                        </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-6">
                         {activeSuppliers.length === 0 ? (
@@ -779,16 +788,6 @@ export default function AddMedicine() {
                             </div>
                         ) : null}
 
-                        {activeSuppliers.length === 0 && linkedSuppliers.length === 0 ? (
-                            <button
-                                type="button"
-                                className="text-sm text-teal-600 underline-offset-4 hover:underline"
-                                onClick={() => void submit()}
-                            >
-                                Skip suppliers and save now
-                            </button>
-                        ) : null}
-
                         <div className="flex justify-between border-t border-border pt-4">
                             <Button type="button" variant="outline" className="gap-1" onClick={() => setCurrentStep(3)}>
                                 <ChevronLeft className="size-4" />
@@ -800,6 +799,7 @@ export default function AddMedicine() {
                                     submitting ||
                                     !step1Valid ||
                                     !step2Valid ||
+                                    linkedSuppliers.length === 0 ||
                                     (requiresAge && (!ageLabel.trim() || !minAge || Number.parseInt(minAge, 10) < 16))
                                 }
                                 className="bg-teal-600 text-white"

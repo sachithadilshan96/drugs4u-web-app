@@ -10,6 +10,7 @@ class MedicineVariant extends Model
 {
     protected $fillable = [
         'medicine_id',
+        'supplier_id',
         'brand_name',
         'manufacturer',
         'strength',
@@ -28,6 +29,14 @@ class MedicineVariant extends Model
     public function medicine(): BelongsTo
     {
         return $this->belongsTo(Medicine::class);
+    }
+
+    /**
+     * @return BelongsTo<Supplier, $this>
+     */
+    public function supplier(): BelongsTo
+    {
+        return $this->belongsTo(Supplier::class);
     }
 
     /**
