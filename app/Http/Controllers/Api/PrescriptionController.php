@@ -4,11 +4,12 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\InventoryStockAllocator;
+use App\Services\PrescriptionStateService;
 use App\Models\AgeVerificationLog;
-use App\Models\AlertLog;
+use App\Models\Bill;
 use App\Models\Customer;
-use App\Models\MedicationHistory;
 use App\Models\Medicine;
+use App\Models\MedicationHistory;
 use App\Models\MedicinePackage;
 use App\Models\Prescription;
 use App\Models\PrescriptionItem;
@@ -24,6 +25,7 @@ use Illuminate\Validation\Rule;
 class PrescriptionController extends Controller
 {
     public function __construct(
+        private readonly PrescriptionStateService $stateService,
         private readonly InventoryStockAllocator $inventoryStockAllocator,
     ) {}
 
@@ -33,6 +35,7 @@ class PrescriptionController extends Controller
             ->with([
                 'customer:id,full_name',
                 'pharmacist:id,name',
+                'bill:id,prescription_id,payment_status',
             ])
             ->withCount('items')
             ->orderByDesc('created_at');
@@ -71,11 +74,13 @@ class PrescriptionController extends Controller
                 'pharmacist_id' => $p->pharmacist_id,
                 'pharmacist_name' => $p->pharmacist?->name,
                 'status' => $p->status,
+                'prescription_type' => $p->prescription_type ?? 'nhs',
                 'notes' => $p->notes,
                 'flagged_reason' => $p->flagged_reason,
                 'flagged_reason_short' => $reasonShort,
                 'flagged_reason_truncated' => is_string($reason) && mb_strlen($reason) > 40,
                 'items_count' => (int) ($p->items_count ?? 0),
+                'bill_status' => $p->bill?->payment_status ?? ($p->status === 'dispatched' ? 'unpaid' : null),
                 'created_at' => $p->created_at?->toIso8601String(),
                 'updated_at' => $p->updated_at?->toIso8601String(),
             ];
@@ -89,7 +94,8 @@ class PrescriptionController extends Controller
         $validated = $request->validate([
             'customer_id' => ['required', 'integer', 'exists:customers,id'],
             'notes' => ['nullable', 'string', 'max:5000'],
-            'status' => ['nullable', Rule::in(['pending', 'dispensed'])],
+            'prescription_type' => ['required', Rule::in(['nhs', 'private'])],
+            'nhs_charge' => ['nullable', 'numeric', 'min:0', 'max:999.99'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.package_id' => ['required', 'integer', 'exists:medicine_packages,id'],
             'items.*.quantity' => ['required', 'integer', 'min:1', 'max:9999'],
@@ -97,8 +103,6 @@ class PrescriptionController extends Controller
             'acknowledged_allergy_overrides.*.medicine_id' => ['required', 'integer', 'exists:medicines,id'],
             'acknowledged_allergy_overrides.*.matched_allergen' => ['required', 'string', 'max:255'],
         ]);
-
-        $requestedStatus = $validated['status'] ?? 'pending';
 
         $customer = Customer::query()
             ->with('customerHealth')
@@ -162,39 +166,34 @@ class PrescriptionController extends Controller
         }
 
         $isFlagged = $flagReasons !== [];
-        $status = $isFlagged ? 'pending_review' : ($requestedStatus === 'dispensed' ? 'dispensed' : 'pending');
-        if ($isFlagged && $requestedStatus === 'dispensed') {
-            $status = 'pending_review';
-        }
-
         $flaggedAt = $isFlagged ? now() : null;
         $flaggedReason = $isFlagged ? implode('; ', $flagReasons) : null;
 
-        $prescription = DB::transaction(function () use ($request, $validated, $status, $flaggedReason, $flaggedAt) {
+        $prescription = DB::transaction(function () use ($request, $validated, $flaggedReason, $flaggedAt) {
             $rx = Prescription::query()->create([
                 'customer_id' => $validated['customer_id'],
                 'pharmacist_id' => $request->user()->id,
-                'status' => $status,
+                'status' => 'draft',
+                'prescription_type' => $validated['prescription_type'],
+                'nhs_charge' => $validated['nhs_charge'] ?? 9.90,
                 'notes' => $validated['notes'] ?? null,
                 'flagged_reason' => $flaggedReason,
                 'flagged_at' => $flaggedAt,
             ]);
 
             foreach ($validated['items'] as $row) {
+                $package = MedicinePackage::query()->findOrFail($row['package_id']);
                 PrescriptionItem::query()->create([
                     'prescription_id' => $rx->id,
                     'package_id' => $row['package_id'],
                     'quantity' => $row['quantity'],
-                    'dispensed_qty' => $status === 'dispensed' ? $row['quantity'] : 0,
+                    'dispensed_qty' => 0,
+                    'quantity_dispensed' => $row['quantity'],
+                    'unit_price_at_time' => $package->unit_price,
                 ]);
             }
 
-            if ($status === 'dispensed') {
-                $rx->load(['items.package.variant.medicine']);
-                $this->fulfillDispensedPrescription($rx);
-            }
-
-            return $rx->fresh(['items.package.variant.medicine', 'customer', 'pharmacist']);
+            return $rx->fresh(['items.package.variant.medicine', 'customer', 'pharmacist', 'bill']);
         });
 
         return response()->json([
@@ -205,7 +204,7 @@ class PrescriptionController extends Controller
 
     public function show(Prescription $prescription): JsonResponse
     {
-        $prescription->load(['items.package.variant.medicine', 'customer', 'pharmacist', 'reviewer']);
+        $prescription->load(['items.package.variant.medicine', 'customer', 'pharmacist', 'reviewer', 'approver', 'dispatcher', 'bill.generatedBy']);
 
         return response()->json(['data' => $this->serializePrescriptionDetail($prescription)]);
     }
@@ -224,6 +223,90 @@ class PrescriptionController extends Controller
         ]);
     }
 
+    public function submit(int $id, Request $request): JsonResponse
+    {
+        $prescription = Prescription::query()->with(['items'])->findOrFail($id);
+        $updated = $this->stateService->submit($prescription, $request->user());
+
+        return response()->json([
+            'data' => $this->serializePrescriptionDetail(
+                $updated->fresh(['items.package.variant.medicine', 'customer', 'pharmacist', 'approver', 'dispatcher', 'bill.generatedBy'])
+            ),
+        ]);
+    }
+
+    public function approve(int $id, Request $request): JsonResponse
+    {
+        $request->validate(['notes' => ['nullable', 'string']]);
+        $prescription = Prescription::query()->findOrFail($id);
+        $updated = $this->stateService->approve($prescription, $request->user());
+
+        if ($request->filled('notes')) {
+            $base = trim((string) ($updated->notes ?? ''));
+            $append = '[Approval note] '.trim((string) $request->input('notes'));
+            $updated->update(['notes' => trim($base !== '' ? $base."\n".$append : $append)]);
+        }
+
+        return response()->json([
+            'data' => $this->serializePrescriptionDetail(
+                $updated->fresh(['items.package.variant.medicine', 'customer', 'pharmacist', 'approver', 'dispatcher', 'bill.generatedBy'])
+            ),
+        ]);
+    }
+
+    public function reject(int $id, Request $request): JsonResponse
+    {
+        $validated = $request->validate(['reason' => ['required', 'string']]);
+        $prescription = Prescription::query()->findOrFail($id);
+        $updated = $this->stateService->reject($prescription, $request->user(), $validated['reason']);
+
+        return response()->json([
+            'data' => $this->serializePrescriptionDetail(
+                $updated->fresh(['items.package.variant.medicine', 'customer', 'pharmacist', 'approver', 'dispatcher', 'bill.generatedBy'])
+            ),
+        ]);
+    }
+
+    public function dispatch(int $id, Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'items' => ['required', 'array', 'min:1'],
+            'items.*.id' => ['required', 'integer', 'exists:prescription_items,id'],
+            'items.*.quantity_dispensed' => ['required', 'integer', 'min:1'],
+        ]);
+
+        $prescription = Prescription::query()->with('items')->findOrFail($id);
+        foreach ($validated['items'] as $row) {
+            $item = $prescription->items->firstWhere('id', (int) $row['id']);
+            if (! $item) {
+                return response()->json(['message' => 'One or more items do not belong to this prescription.'], 422);
+            }
+            $item->update([
+                'quantity_dispensed' => (int) $row['quantity_dispensed'],
+            ]);
+        }
+
+        $updated = $this->stateService->dispatch($prescription->fresh('items'), $request->user());
+
+        return response()->json([
+            'data' => $this->serializePrescriptionDetail(
+                $updated->fresh(['items.package.variant.medicine', 'customer', 'pharmacist', 'approver', 'dispatcher', 'bill.generatedBy'])
+            ),
+        ]);
+    }
+
+    public function cancel(int $id, Request $request): JsonResponse
+    {
+        $prescription = Prescription::query()->findOrFail($id);
+        $updated = $this->stateService->cancel($prescription, $request->user());
+
+        return response()->json([
+            'data' => $this->serializePrescriptionDetail(
+                $updated->fresh(['items.package.variant.medicine', 'customer', 'pharmacist', 'approver', 'dispatcher', 'bill.generatedBy'])
+            ),
+        ]);
+    }
+
     public function review(Request $request, Prescription $prescription): JsonResponse
     {
         $validated = $request->validate([
@@ -239,41 +322,28 @@ class PrescriptionController extends Controller
         $managerNote = isset($validated['notes']) ? trim((string) $validated['notes']) : '';
 
         if ($validated['decision'] === 'approve') {
-            DB::transaction(function () use ($prescription, $user, $managerNote) {
-                $prescription->load(['items.package.variant.medicine']);
-                $this->fulfillDispensedPrescription($prescription);
-                $baseNotes = $prescription->notes !== null ? trim((string) $prescription->notes) : '';
-                $append = $managerNote !== '' ? "\n\n[Manager approval — {$user->name}]: ".$managerNote : '';
-                $prescription->update([
-                    'status' => 'dispensed',
-                    'reviewed_by' => $user->id,
-                    'reviewed_at' => now(),
-                    'notes' => $baseNotes.$append,
-                ]);
-            });
+            $updated = $this->stateService->approve($prescription, $user);
 
-            AlertLog::query()->create([
-                'alert_type' => 'prescription_review',
-                'reference_id' => $prescription->id,
-                'message' => 'Prescription #'.$prescription->id.' approved by manager '.$user->name,
-                'dismissed' => false,
+            if ($managerNote !== '') {
+                $base = trim((string) ($updated->notes ?? ''));
+                $append = '[Approval note] '.$managerNote;
+                $updated->update(['notes' => trim($base !== '' ? $base."\n".$append : $append)]);
+            }
+
+            return response()->json([
+                'data' => $this->serializePrescriptionDetail(
+                    $updated->fresh(['items.package.variant.medicine', 'customer', 'pharmacist', 'approver', 'dispatcher', 'bill.generatedBy'])
+                ),
             ]);
-
-            $fresh = $prescription->fresh(['items.package.variant.medicine', 'customer', 'pharmacist', 'reviewer']);
-
-            return response()->json(['data' => $this->serializePrescriptionDetail($fresh)]);
         }
 
-        $rejectBlock = '[Manager rejection — '.$user->name.']: '.($managerNote !== '' ? $managerNote : 'No reason supplied.');
-        $prescription->update([
-            'status' => 'rejected',
-            'reviewed_by' => $user->id,
-            'reviewed_at' => now(),
-            'notes' => trim(trim((string) $prescription->notes)."\n\n".$rejectBlock),
-        ]);
+        $reason = $managerNote !== '' ? $managerNote : 'No reason supplied';
+        $updated = $this->stateService->reject($prescription, $user, $reason);
 
         return response()->json([
-            'data' => $this->serializePrescriptionDetail($prescription->fresh(['items.package.variant.medicine', 'customer', 'pharmacist', 'reviewer'])),
+            'data' => $this->serializePrescriptionDetail(
+                $updated->fresh(['items.package.variant.medicine', 'customer', 'pharmacist', 'approver', 'dispatcher', 'bill.generatedBy'])
+            ),
         ]);
     }
 
@@ -361,8 +431,8 @@ class PrescriptionController extends Controller
 
     public function destroy(Prescription $prescription): Response|JsonResponse
     {
-        if ($prescription->status === 'dispensed') {
-            return response()->json(['message' => 'Dispensed prescriptions cannot be deleted.'], 422);
+        if (in_array($prescription->status, ['dispatched'], true)) {
+            return response()->json(['message' => 'Dispatched prescriptions cannot be deleted.'], 422);
         }
 
         $prescription->delete();
@@ -543,14 +613,28 @@ class PrescriptionController extends Controller
                 'name' => $p->pharmacist->name,
             ] : null,
             'status' => $p->status,
+            'prescription_type' => $p->prescription_type ?? 'nhs',
+            'nhs_charge' => $p->nhs_charge,
             'notes' => $p->notes,
             'flagged_reason' => $p->flagged_reason,
             'flagged_at' => $p->flagged_at?->toIso8601String(),
             'reviewed_by' => $p->reviewed_by,
             'reviewed_at' => $p->reviewed_at?->toIso8601String(),
+            'approved_by' => $p->approved_by,
+            'approved_at' => $p->approved_at?->toIso8601String(),
+            'dispatched_by' => $p->dispatched_by,
+            'dispatched_at' => $p->dispatched_at?->toIso8601String(),
             'reviewer' => $p->relationLoaded('reviewer') && $p->reviewer ? [
                 'id' => $p->reviewer->id,
                 'name' => $p->reviewer->name,
+            ] : null,
+            'approver' => $p->relationLoaded('approver') && $p->approver ? [
+                'id' => $p->approver->id,
+                'name' => $p->approver->name,
+            ] : null,
+            'dispatcher' => $p->relationLoaded('dispatcher') && $p->dispatcher ? [
+                'id' => $p->dispatcher->id,
+                'name' => $p->dispatcher->name,
             ] : null,
             'items' => $p->relationLoaded('items')
                 ? $p->items->map(function (PrescriptionItem $i) {
@@ -567,9 +651,18 @@ class PrescriptionController extends Controller
                         'package_description' => $pkg?->full_description,
                         'quantity' => $i->quantity,
                         'dispensed_qty' => $i->dispensed_qty,
+                        'quantity_dispensed' => $i->quantity_dispensed,
+                        'unit_price_at_time' => $i->unit_price_at_time,
+                        'line_total' => $i->line_total,
                     ];
                 })->values()->all()
                 : [],
+            'bill' => $p->relationLoaded('bill') && $p->bill ? [
+                'id' => $p->bill->id,
+                'bill_number' => $p->bill->bill_number,
+                'payment_status' => $p->bill->payment_status,
+                'total_amount' => $p->bill->total_amount,
+            ] : null,
             'created_at' => $p->created_at?->toIso8601String(),
             'updated_at' => $p->updated_at?->toIso8601String(),
         ];

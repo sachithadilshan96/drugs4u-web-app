@@ -105,6 +105,7 @@ export default function InventoryList() {
     const [newQty, setNewQty] = useState('1');
     const [newExpiry, setNewExpiry] = useState('');
     const [creating, setCreating] = useState(false);
+    const [priceEditingByPackage, setPriceEditingByPackage] = useState({});
 
     const [expandedMedicineKeys, setExpandedMedicineKeys] = useState(() => new Set());
 
@@ -209,6 +210,21 @@ export default function InventoryList() {
         setUpdateQty('1');
         setStockModalOpen(true);
     }, []);
+
+    const saveUnitPrice = useCallback(async (packageId, raw) => {
+        const val = Number.parseFloat(String(raw));
+        if (!Number.isFinite(val) || val < 0) {
+            toast.error('Enter a valid unit price.');
+            return;
+        }
+        try {
+            await medicinesApi.updatePackagePrice(packageId, val);
+            toast.success('Unit price updated.');
+            await load();
+        } catch (e) {
+            toast.error(e.response?.data?.message ?? 'Could not update unit price.');
+        }
+    }, [load]);
 
     const insufficientDispense = useMemo(() => {
         if (updateType !== 'dispense' || !stockTarget) {
@@ -355,6 +371,7 @@ export default function InventoryList() {
                                 <TableHead>Product</TableHead>
                                 <TableHead>Package</TableHead>
                                 <TableHead>Unit</TableHead>
+                                <TableHead>Unit Price</TableHead>
                                 <TableHead>Quantity</TableHead>
                                 <TableHead>Expiry Date</TableHead>
                                 <TableHead>Status</TableHead>
@@ -375,6 +392,9 @@ export default function InventoryList() {
                                             <Skeleton className="h-4 w-16" />
                                         </TableCell>
                                         <TableCell>
+                                            <Skeleton className="h-4 w-16" />
+                                        </TableCell>
+                                        <TableCell>
                                             <Skeleton className="h-4 w-12" />
                                         </TableCell>
                                         <TableCell>
@@ -390,7 +410,7 @@ export default function InventoryList() {
                                 ))
                             ) : rows.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={7} className="h-20 text-center text-muted-foreground">
+                                    <TableCell colSpan={8} className="h-20 text-center text-muted-foreground">
                                         No inventory rows found.
                                     </TableCell>
                                 </TableRow>
@@ -422,7 +442,7 @@ export default function InventoryList() {
                                                         <span className="min-w-0 truncate">{group.medicineName}</span>
                                                     </button>
                                                 </TableCell>
-                                                <TableCell colSpan={6} className="py-3 align-middle text-sm text-muted-foreground">
+                                                <TableCell colSpan={7} className="py-3 align-middle text-sm text-muted-foreground">
                                                     <span className="hidden sm:inline">
                                                         {pkgCount} package{pkgCount === 1 ? '' : 's'} · {batchCount} batch
                                                         {batchCount === 1 ? '' : 'es'} · {totalQty} units
@@ -440,6 +460,7 @@ export default function InventoryList() {
                                                           status.label === 'LOW STOCK' || status.label === 'EXPIRED';
                                                       const pkgLabel =
                                                           row.package_detail ?? row.package_description ?? '—';
+                                                      const variantLabel = row.variant_display ?? '';
                                                       return (
                                                           <TableRow
                                                               key={row.id}
@@ -456,10 +477,70 @@ export default function InventoryList() {
                                                           >
                                                               <TableCell className="pl-10 text-muted-foreground" />
                                                               <TableCell className="max-w-[14rem] text-sm text-foreground">
-                                                                  {pkgLabel}
+                                                                  <div className="leading-tight">
+                                                                      <div>{pkgLabel}</div>
+                                                                      {variantLabel ? (
+                                                                          <div className="text-xs text-muted-foreground">
+                                                                              {variantLabel}
+                                                                          </div>
+                                                                      ) : null}
+                                                                  </div>
                                                               </TableCell>
                                                               <TableCell className="whitespace-nowrap text-sm">
                                                                   {row.package_unit ?? '—'}
+                                                              </TableCell>
+                                                              <TableCell className="whitespace-nowrap text-sm">
+                                                                  {priceEditingByPackage[row.package_id] != null ? (
+                                                                      <Input
+                                                                          type="number"
+                                                                          min={0}
+                                                                          step="0.01"
+                                                                          className="h-8 w-24"
+                                                                          value={priceEditingByPackage[row.package_id]}
+                                                                          onChange={(e) =>
+                                                                              setPriceEditingByPackage((prev) => ({
+                                                                                  ...prev,
+                                                                                  [row.package_id]: e.target.value,
+                                                                              }))
+                                                                          }
+                                                                          onBlur={() => {
+                                                                              const raw = priceEditingByPackage[row.package_id];
+                                                                              setPriceEditingByPackage((prev) => {
+                                                                                  const n = { ...prev };
+                                                                                  delete n[row.package_id];
+                                                                                  return n;
+                                                                              });
+                                                                              if (raw != null) {
+                                                                                  void saveUnitPrice(row.package_id, raw);
+                                                                              }
+                                                                          }}
+                                                                          onKeyDown={(e) => {
+                                                                              if (e.key === 'Enter') {
+                                                                                  e.currentTarget.blur();
+                                                                              }
+                                                                          }}
+                                                                      />
+                                                                  ) : (
+                                                                      <button
+                                                                          type="button"
+                                                                          className="rounded px-1.5 py-0.5 hover:bg-muted"
+                                                                          onClick={() =>
+                                                                              setPriceEditingByPackage((prev) => ({
+                                                                                  ...prev,
+                                                                                  [row.package_id]:
+                                                                                      row.unit_price != null
+                                                                                          ? String(row.unit_price)
+                                                                                          : '',
+                                                                              }))
+                                                                          }
+                                                                      >
+                                                                          {row.unit_price != null ? (
+                                                                              `£${Number(row.unit_price).toFixed(2)}`
+                                                                          ) : (
+                                                                              <span className="text-amber-600">Not set</span>
+                                                                          )}
+                                                                      </button>
+                                                                  )}
                                                               </TableCell>
                                                               <TableCell>{row.quantity}</TableCell>
                                                               <TableCell>{formatDate(row.expiry_date)}</TableCell>

@@ -29,8 +29,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 function statusBadgeClass(status) {
     switch (status) {
-        case 'dispensed':
+        case 'dispatched':
             return 'border-teal-500/50 bg-teal-950/40 text-teal-100';
+        case 'approved':
+            return 'border-blue-500/50 bg-blue-950/40 text-blue-100';
         case 'rejected':
             return 'border-red-500/50 bg-red-950/40 text-red-100';
         case 'pending_review':
@@ -42,8 +44,9 @@ function statusBadgeClass(status) {
 
 function statusLabel(status) {
     if (status === 'pending_review') {
-        return 'Awaiting Review';
+        return 'Needs Approval';
     }
+    if (status === 'approved') return 'Ready to Dispatch';
     return status;
 }
 
@@ -172,10 +175,12 @@ export default function PrescriptionList() {
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="all">All</SelectItem>
-                                    <SelectItem value="pending">Pending</SelectItem>
+                                    <SelectItem value="draft">Draft</SelectItem>
                                     <SelectItem value="pending_review">Awaiting Review</SelectItem>
-                                    <SelectItem value="dispensed">Dispensed</SelectItem>
+                                    <SelectItem value="approved">Approved</SelectItem>
+                                    <SelectItem value="dispatched">Dispatched</SelectItem>
                                     <SelectItem value="rejected">Rejected</SelectItem>
+                                    <SelectItem value="cancelled">Cancelled</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
@@ -200,15 +205,17 @@ export default function PrescriptionList() {
                                     <TableHead>Customer</TableHead>
                                     <TableHead>Pharmacist</TableHead>
                                     <TableHead>Items</TableHead>
+                                    <TableHead>Type</TableHead>
                                     <TableHead>Flagged</TableHead>
                                     <TableHead>Status</TableHead>
+                                    <TableHead>Bill</TableHead>
                                     <TableHead className="w-[100px] text-right">Actions</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {rows.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                                        <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
                                             No prescriptions match your filters.
                                         </TableCell>
                                     </TableRow>
@@ -237,6 +244,11 @@ export default function PrescriptionList() {
                                                 <TableCell className="font-medium">{r.customer_name ?? '—'}</TableCell>
                                                 <TableCell>{r.pharmacist_name ?? '—'}</TableCell>
                                                 <TableCell>{r.items_count ?? 0}</TableCell>
+                                                <TableCell>
+                                                    <Badge variant="outline" className={r.prescription_type === 'private' ? 'border-violet-500/50 text-violet-200' : 'border-blue-500/50 text-blue-200'}>
+                                                        {(r.prescription_type || 'nhs').toUpperCase()}
+                                                    </Badge>
+                                                </TableCell>
                                                 <TableCell
                                                     className="max-w-[14rem] truncate text-sm text-muted-foreground"
                                                     title={fullReason || undefined}
@@ -247,6 +259,9 @@ export default function PrescriptionList() {
                                                     <Badge variant="outline" className={statusBadgeClass(r.status)}>
                                                         {statusLabel(r.status)}
                                                     </Badge>
+                                                </TableCell>
+                                                <TableCell>
+                                                    {r.bill_status ? <Badge variant="secondary">{String(r.bill_status).toUpperCase()}</Badge> : 'Not billed'}
                                                 </TableCell>
                                                 <TableCell
                                                     className="text-right"

@@ -15,6 +15,8 @@ class MedicinePackage extends Model
         'package_size',
         'package_unit',
         'barcode',
+        'unit_price',
+        'nhs_reimbursement_price',
     ];
 
     protected $appends = [
@@ -28,6 +30,8 @@ class MedicinePackage extends Model
     {
         return [
             'package_size' => 'integer',
+            'unit_price' => 'decimal:2',
+            'nhs_reimbursement_price' => 'decimal:2',
         ];
     }
 
@@ -71,5 +75,14 @@ class MedicinePackage extends Model
             $this->package_size,
             $this->package_unit
         );
+    }
+
+    public function getFormattedPriceAttribute(): string
+    {
+        if ($this->unit_price === null) {
+            return 'Not set';
+        }
+
+        return '£'.number_format((float) $this->unit_price, 2);
     }
 }

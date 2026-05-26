@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Bill;
 use App\Models\MedicationHistory;
 use App\Models\Medicine;
 use App\Models\Prescription;
@@ -52,10 +53,31 @@ class DashboardController extends Controller
             ];
         })->values()->all();
 
+        $readyToDispatch = Prescription::query()->where('status', 'approved')->count();
+        $awaitingBilling = Prescription::query()
+            ->where('status', 'dispatched')
+            ->whereDoesntHave('bill')
+            ->count();
+        $pendingApproval = Prescription::query()->where('status', 'pending_review')->count();
+        $revenueToday = (float) Bill::query()
+            ->where('payment_status', 'paid')
+            ->whereDate('paid_at', $today)
+            ->sum('total_amount');
+        $nhsToday = Prescription::query()->whereDate('created_at', $today)->where('prescription_type', 'nhs')->count();
+        $privateToday = Prescription::query()->whereDate('created_at', $today)->where('prescription_type', 'private')->count();
+
         return response()->json([
             'data' => [
                 'weekly_prescription_trend' => $trend,
                 'top_dispensed_medicines' => $topDispensed,
+                'ready_to_dispatch' => $readyToDispatch,
+                'awaiting_billing' => $awaitingBilling,
+                'pending_approval' => $pendingApproval,
+                'revenue_today' => $revenueToday,
+                'nhs_private_split_today' => [
+                    'nhs' => $nhsToday,
+                    'private' => $privateToday,
+                ],
             ],
         ]);
     }

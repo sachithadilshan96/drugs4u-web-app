@@ -99,6 +99,14 @@ export function updateMedicinePackage(packageId, data) {
 }
 
 /**
+ * @param {number|string} packageId
+ * @param {number|string} unitPrice
+ */
+export function updatePackagePrice(packageId, unitPrice) {
+    return api.patch(`/packages/${packageId}/price`, { unit_price: unitPrice });
+}
+
+/**
  * @param {object} data
  */
 export function logAgeVerification(data) {

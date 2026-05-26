@@ -1,45 +1,21 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import * as prescriptionsApi from '@/api/prescriptions';
+import { useAuthStore } from '@/store/authStore';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import BillSummary from '@/components/prescriptions/BillSummary';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
+import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 
-function statusBadgeVariant(status) {
-    switch (status) {
-        case 'dispensed':
-            return 'border-teal-500/50 bg-teal-950/40 text-teal-100';
-        case 'rejected':
-            return 'border-red-500/50 bg-red-950/40 text-red-100';
-        default:
-            return 'border-amber-500/50 bg-amber-950/40 text-amber-100';
-    }
-}
-
 function formatWhen(iso) {
-    if (!iso) {
-        return '—';
-    }
+    if (!iso) return '—';
     try {
-        return new Date(iso).toLocaleString('en-GB', {
-            day: 'numeric',
-            month: 'short',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-        });
+        return new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     } catch {
         return '—';
     }
@@ -47,152 +23,209 @@ function formatWhen(iso) {
 
 export default function PrescriptionDetail() {
     const { id } = useParams();
+    const role = useAuthStore((s) => s.user?.role);
     const [loading, setLoading] = useState(true);
     const [rx, setRx] = useState(null);
+    const [billData, setBillData] = useState(null);
+    const [rejectReason, setRejectReason] = useState('');
+    const [dispatchItems, setDispatchItems] = useState([]);
 
     useDocumentTitle(rx ? `Prescription #${rx.id}` : 'Prescription');
 
-    useEffect(() => {
-        let cancelled = false;
-        (async () => {
-            setLoading(true);
-            try {
-                const { data } = await prescriptionsApi.getPrescription(id);
-                if (!cancelled) {
-                    setRx(data.data ?? data);
+    const load = async () => {
+        setLoading(true);
+        setBillData(null);
+        try {
+            const { data } = await prescriptionsApi.getPrescription(id);
+            const p = data.data ?? data;
+            setRx(p);
+            if (p.bill || p.status === 'dispatched') {
+                try {
+                    const billRes = await prescriptionsApi.getBill(id);
+                    setBillData(billRes.data?.data ?? null);
+                } catch {
+                    setBillData(null);
                 }
-            } catch (e) {
-                toast.error(e.response?.data?.message ?? 'Could not load prescription.');
-                if (!cancelled) {
-                    setRx(null);
-                }
-            } finally {
-                if (!cancelled) {
-                    setLoading(false);
-                }
+            } else {
+                setBillData(null);
             }
-        })();
-        return () => {
-            cancelled = true;
-        };
+            setDispatchItems((p.items ?? []).map((it) => ({ id: it.id, quantity_dispensed: it.quantity_dispensed || it.quantity || 1 })));
+        } catch (e) {
+            toast.error(e.response?.data?.message ?? 'Could not load prescription.');
+            setRx(null);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        void load();
     }, [id]);
 
-    if (loading) {
-        return (
-            <div className="space-y-6">
-                <Skeleton className="h-8 w-48" />
-                <div className="grid gap-4 sm:grid-cols-2">
-                    <Skeleton className="h-40 rounded-xl" />
-                    <Skeleton className="h-40 rounded-xl" />
-                </div>
-                <Skeleton className="h-56 rounded-xl" />
-            </div>
-        );
-    }
+    const onSubmit = async () => {
+        try {
+            await prescriptionsApi.submitPrescription(rx.id);
+            toast.success('Prescription submitted.');
+            await load();
+        } catch (e) {
+            toast.error(e.response?.data?.message ?? 'Could not submit.');
+        }
+    };
+    const onApprove = async () => {
+        try {
+            await prescriptionsApi.approvePrescription(rx.id);
+            toast.success('Prescription approved.');
+            await load();
+        } catch (e) {
+            toast.error(e.response?.data?.message ?? 'Could not approve.');
+        }
+    };
+    const onReject = async () => {
+        if (!rejectReason.trim()) return toast.error('Enter rejection reason.');
+        try {
+            await prescriptionsApi.rejectPrescription(rx.id, rejectReason.trim());
+            toast.success('Prescription rejected.');
+            await load();
+        } catch (e) {
+            toast.error(e.response?.data?.message ?? 'Could not reject.');
+        }
+    };
+    const onDispatch = async () => {
+        try {
+            await prescriptionsApi.dispatchPrescription(rx.id, dispatchItems);
+            toast.success('Prescription dispatched.');
+            await load();
+        } catch (e) {
+            toast.error(e.response?.data?.message ?? 'Could not dispatch.');
+        }
+    };
+    const onCancel = async () => {
+        try {
+            await prescriptionsApi.cancelPrescription(rx.id);
+            toast.success('Prescription cancelled.');
+            await load();
+        } catch (e) {
+            toast.error(e.response?.data?.message ?? 'Could not cancel.');
+        }
+    };
+    const onGenerateBill = async () => {
+        try {
+            await prescriptionsApi.generateBill(rx.id);
+            toast.success('Bill generated.');
+            await load();
+        } catch (e) {
+            toast.error(e.response?.data?.message ?? 'Could not generate bill.');
+        }
+    };
 
-    if (!rx) {
-        return (
-            <div className="rounded-lg border border-border p-8 text-center text-muted-foreground">
-                Prescription not found.{' '}
-                <Button variant="link" className="px-1" asChild>
-                    <Link to="/prescriptions">Back to list</Link>
-                </Button>
-            </div>
-        );
-    }
+    const statusColor = useMemo(() => {
+        if (!rx) return 'secondary';
+        if (rx.status === 'rejected') return 'destructive';
+        if (rx.status === 'dispatched') return 'default';
+        return 'secondary';
+    }, [rx]);
 
-    const items = rx.items ?? [];
+    if (loading) return <Skeleton className="h-60 w-full" />;
+    if (!rx) return <p className="text-sm text-muted-foreground">Prescription not found.</p>;
 
     return (
         <div className="space-y-6">
             <Button variant="ghost" size="sm" className="gap-1 px-0 text-muted-foreground" asChild>
-                <Link to="/prescriptions">
-                    <ArrowLeft className="size-4" aria-hidden />
-                    All prescriptions
-                </Link>
+                <Link to="/prescriptions"><ArrowLeft className="size-4" aria-hidden />All prescriptions</Link>
             </Button>
-
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                    <h1 className="font-heading text-2xl font-semibold tracking-tight">Prescription #{rx.id}</h1>
-                    <p className="mt-1 text-sm text-muted-foreground">Created {formatWhen(rx.created_at)}</p>
+            <div className="flex items-center justify-between">
+                <h1 className="font-heading text-2xl font-semibold tracking-tight">Prescription #{rx.id}</h1>
+                <div className="flex items-center gap-2">
+                    <Badge variant={statusColor}>{rx.status}</Badge>
+                    <Badge variant="outline">{(rx.prescription_type || 'nhs').toUpperCase()}</Badge>
                 </div>
-                <Badge variant="outline" className={statusBadgeVariant(rx.status)}>
-                    {rx.status}
-                </Badge>
             </div>
 
             <Card>
                 <CardHeader>
-                    <CardTitle className="text-lg">People</CardTitle>
-                    <CardDescription>Customer and responsible pharmacist.</CardDescription>
+                    <CardTitle>Status timeline</CardTitle>
+                    <CardDescription>Draft → Pending review/Approved → Dispatched → Billed</CardDescription>
                 </CardHeader>
-                <CardContent className="grid gap-4 sm:grid-cols-2 text-sm">
-                    <div>
-                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Customer</p>
-                        <p className="mt-1 font-medium">{rx.customer?.full_name ?? '—'}</p>
-                        {rx.customer?.id ? (
-                            <Button variant="link" className="h-auto px-0 py-1 text-teal-600" asChild>
-                                <Link to={`/customers/${rx.customer.id}`}>View customer record</Link>
-                            </Button>
-                        ) : null}
-                    </div>
-                    <div>
-                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Pharmacist</p>
-                        <p className="mt-1">{rx.pharmacist?.name ?? '—'}</p>
-                    </div>
+                <CardContent className="text-sm text-muted-foreground">
+                    Created {formatWhen(rx.created_at)}{rx.approved_at ? ` · Approved ${formatWhen(rx.approved_at)}` : ''}{rx.dispatched_at ? ` · Dispatched ${formatWhen(rx.dispatched_at)}` : ''}
                 </CardContent>
             </Card>
 
-            {rx.notes ? (
+            <Card>
+                <CardHeader><CardTitle>Items</CardTitle></CardHeader>
+                <CardContent className="space-y-2">
+                    {(rx.items ?? []).map((item) => (
+                        <div key={item.id} className="flex items-center justify-between gap-2 rounded-md border p-2">
+                            <div className="text-sm">
+                                <div className="font-medium">{item.medicine_name}</div>
+                                <div className="text-xs text-muted-foreground">{item.package_description}</div>
+                            </div>
+                            {rx.status === 'draft' || rx.status === 'approved' ? (
+                                <Input
+                                    type="number"
+                                    min={1}
+                                    className="w-24"
+                                    value={dispatchItems.find((x) => x.id === item.id)?.quantity_dispensed ?? item.quantity}
+                                    onChange={(e) => setDispatchItems((prev) => prev.map((x) => x.id === item.id ? { ...x, quantity_dispensed: Number(e.target.value) || 1 } : x))}
+                                />
+                            ) : (
+                                <span className="text-sm">Qty {item.quantity_dispensed ?? item.quantity}</span>
+                            )}
+                        </div>
+                    ))}
+                </CardContent>
+            </Card>
+
+            {rx.status === 'draft' ? (
+                <div className="flex gap-2">
+                    <Button className="bg-emerald-600 text-white hover:bg-emerald-500" onClick={onSubmit}>Submit Prescription</Button>
+                    <Button variant="outline" className="text-destructive" onClick={onCancel}>Cancel</Button>
+                </div>
+            ) : null}
+
+            {rx.status === 'pending_review' ? (
                 <Card>
-                    <CardHeader>
-                        <CardTitle className="text-lg">Notes</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <p className="whitespace-pre-wrap text-sm">{rx.notes}</p>
+                    <CardHeader><CardTitle>Awaiting manager approval</CardTitle></CardHeader>
+                    <CardContent className="space-y-3">
+                        <p className="text-sm">{rx.flagged_reason}</p>
+                        {(role === 'manager' || role === 'admin') ? (
+                            <div className="flex flex-wrap gap-2">
+                                <Input value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} placeholder="Rejection reason" className="max-w-sm" />
+                                <Button className="bg-emerald-600 text-white hover:bg-emerald-500" onClick={onApprove}>Approve</Button>
+                                <Button variant="destructive" onClick={onReject}>Reject</Button>
+                            </div>
+                        ) : null}
                     </CardContent>
                 </Card>
             ) : null}
 
-            <Card>
-                <CardHeader>
-                    <CardTitle className="text-lg">Line items</CardTitle>
-                    <CardDescription>Medicines on this prescription.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    {items.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">No items.</p>
-                    ) : (
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Product</TableHead>
-                                    <TableHead>Quantity</TableHead>
-                                    <TableHead>Dispensed</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {items.map((row) => (
-                                    <TableRow key={row.id}>
-                                        <TableCell className="font-medium">
-                                            <div>{row.medicine_name ?? '—'}</div>
-                                            {row.variant_display ? (
-                                                <div className="text-xs text-muted-foreground">{row.variant_display}</div>
-                                            ) : null}
-                                            {row.package_description ? (
-                                                <div className="text-xs text-muted-foreground">{row.package_description}</div>
-                                            ) : null}
-                                        </TableCell>
-                                        <TableCell>{row.quantity}</TableCell>
-                                        <TableCell>{row.dispensed_qty ?? 0}</TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    )}
-                </CardContent>
-            </Card>
+            {rx.status === 'approved' ? (
+                <div className="flex gap-2">
+                    <Button className="bg-emerald-600 text-white hover:bg-emerald-500" onClick={onDispatch}>Confirm & Dispatch</Button>
+                    <Button variant="outline" className="text-destructive" onClick={onCancel}>Cancel</Button>
+                </div>
+            ) : null}
+
+            {rx.status === 'dispatched' ? (
+                <Card>
+                    <CardHeader><CardTitle>Billing</CardTitle></CardHeader>
+                    <CardContent className="space-y-4">
+                        {rx.bill ? (
+                            <BillSummary
+                                bill={{
+                                    prescription_id: Number(id),
+                                    ...(rx.bill ?? {}),
+                                    ...(billData ?? {}),
+                                }}
+                                role={role}
+                                onChanged={load}
+                            />
+                        ) : (
+                            <Button className="bg-teal-600 text-white hover:bg-teal-500" onClick={onGenerateBill}>Generate Bill</Button>
+                        )}
+                    </CardContent>
+                </Card>
+            ) : null}
         </div>
     );
 }

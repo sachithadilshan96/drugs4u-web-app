@@ -70,6 +70,7 @@ function mapPackagePickerRows(rows) {
             medicine_name: String(r.medicine_name ?? ''),
             line_label: String(r.line_label ?? ''),
             stock: Number(r.stock) || 0,
+            unit_price: r.unit_price != null ? Number(r.unit_price) : null,
             requires_age_check: Boolean(r.requires_age_check),
             min_age: typeof r.min_age === 'number' ? r.min_age : r.min_age != null ? Number(r.min_age) : null,
         }))
@@ -92,7 +93,7 @@ const ID_TYPE_OPTIONS = [
 ];
 
 function StepIndicator({ step }) {
-    const labels = ['Customer', 'Medicines', 'Review'];
+    const labels = ['Type', 'Customer', 'Medicines', 'Review'];
     return (
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             {labels.map((label, i) => {
@@ -129,7 +130,8 @@ export default function NewPrescription() {
     const [searchParams] = useSearchParams();
     const preCustomerId = searchParams.get('customer');
 
-    const [step, setStep] = useState(1);
+    const [step, setStep] = useState(0);
+    const [prescriptionType, setPrescriptionType] = useState('nhs');
 
     const [customerQuery, setCustomerQuery] = useState('');
     const [debouncedCustomerQuery, setDebouncedCustomerQuery] = useState('');
@@ -599,13 +601,16 @@ export default function NewPrescription() {
 
             const { data, status } = await prescriptionsApi.createPrescription({
                 customer_id: selectedCustomer.id,
+                prescription_type: prescriptionType,
                 notes: notes.trim() || undefined,
-                status: 'dispensed',
                 items: lineItems.map((r) => ({ package_id: r.package_id, quantity: r.quantity })),
                 acknowledged_allergy_overrides,
             });
             if (status >= 200 && status < 300) {
                 const newId = data.data?.id;
+                if (newId) {
+                    await prescriptionsApi.submitPrescription(newId);
+                }
                 if (newId && completedVerificationIds.length > 0) {
                     try {
                         await medicinesApi.linkVerificationsToPrescription(completedVerificationIds, newId);
@@ -613,7 +618,8 @@ export default function NewPrescription() {
                         toast.error('Prescription created but age verification logs could not be linked.');
                     }
                 }
-                const st = data.data?.status;
+                const { data: submitted } = newId ? await prescriptionsApi.getPrescription(newId) : { data: null };
+                const st = submitted?.data?.status ?? data.data?.status;
                 if (st === 'pending_review') {
                     toast.success('Prescription submitted for manager review');
                 } else if (st === 'dispensed') {
@@ -642,7 +648,7 @@ export default function NewPrescription() {
         } finally {
             setSubmitting(false);
         }
-    }, [completedVerificationIds, lineItems, navigate, notes, selectedCustomer]);
+    }, [completedVerificationIds, lineItems, navigate, notes, prescriptionType, selectedCustomer]);
 
     const minForCurrent = currentAgeCheck?.line?.min_age ?? 18;
     const medLabel = currentAgeCheck?.medicine?.age_restriction_label
@@ -678,6 +684,40 @@ export default function NewPrescription() {
             </div>
 
             <StepIndicator step={step} />
+
+            {step === 0 ? (
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="text-lg">Step 0 — Prescription type</CardTitle>
+                        <CardDescription>Choose billing type before adding medicines.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <button
+                                type="button"
+                                className={`rounded-lg border p-4 text-left ${prescriptionType === 'nhs' ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/20' : 'border-border'}`}
+                                onClick={() => setPrescriptionType('nhs')}
+                            >
+                                <p className="font-semibold">NHS Prescription</p>
+                                <p className="text-sm text-muted-foreground">Standard NHS charge of £9.90 per item.</p>
+                            </button>
+                            <button
+                                type="button"
+                                className={`rounded-lg border p-4 text-left ${prescriptionType === 'private' ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/20' : 'border-border'}`}
+                                onClick={() => setPrescriptionType('private')}
+                            >
+                                <p className="font-semibold">Private Prescription</p>
+                                <p className="text-sm text-muted-foreground">Full medicine cost charged to customer.</p>
+                            </button>
+                        </div>
+                        <div className="flex justify-end">
+                            <Button type="button" className="bg-teal-600 text-white hover:bg-teal-500" onClick={() => setStep(1)}>
+                                Next
+                            </Button>
+                        </div>
+                    </CardContent>
+                </Card>
+            ) : null}
 
             {step === 1 ? (
                 <Card>
@@ -776,7 +816,7 @@ export default function NewPrescription() {
                                 type="button"
                                 className="bg-teal-600 text-white hover:bg-teal-500"
                                 disabled={!selectedCustomer || customerDetailLoading}
-                                onClick={() => setStep(2)}
+                            onClick={() => setStep(2)}
                             >
                                 Next
                             </Button>
@@ -861,6 +901,7 @@ export default function NewPrescription() {
                                                     disabled={p.stock <= 0}
                                                 >
                                                     {p.line_label} — Stock: {p.stock}
+                                                    {p.unit_price != null ? ` — £${Number(p.unit_price).toFixed(2)}/unit` : ' — Price not set'}
                                                 </option>
                                             ))}
                                         </optgroup>
@@ -1004,6 +1045,28 @@ export default function NewPrescription() {
                                         </li>
                                     ))}
                                 </ul>
+                                <div className="mt-4 rounded-md border border-border bg-background p-3 text-sm">
+                                    {prescriptionType === 'nhs' ? (
+                                        <p>
+                                            Estimated NHS charge: £9.90 x {lineItems.length} items ={' '}
+                                            <span className="font-semibold">£{(9.9 * lineItems.length).toFixed(2)}</span>
+                                        </p>
+                                    ) : (
+                                        <p>
+                                            Estimated total:{' '}
+                                            <span className="font-semibold">
+                                                £
+                                                {lineItems
+                                                    .reduce((sum, row) => {
+                                                        const opt = medicineOptions.find((m) => m.package_id === row.package_id);
+                                                        return sum + (opt?.unit_price ?? 0) * row.quantity;
+                                                    }, 0)
+                                                    .toFixed(2)}
+                                            </span>
+                                        </p>
+                                    )}
+                                    <p className="mt-1 text-xs text-muted-foreground">Final bill is generated after dispatch.</p>
+                                </div>
                             </CardContent>
                         </Card>
                         <div className="space-y-2">
@@ -1051,25 +1114,28 @@ export default function NewPrescription() {
             >
                 <DialogContent
                     showCloseButton={false}
-                    className="max-h-[90dvh] max-w-lg overflow-y-auto sm:max-w-lg"
+                    className="flex max-h-[min(90vh,40rem)] min-h-0 w-full max-w-lg flex-col gap-0 overflow-hidden p-0 sm:max-w-lg"
                     onPointerDownOutside={(e) => e.preventDefault()}
                     onEscapeKeyDown={(e) => e.preventDefault()}
                 >
                     {currentAgeCheck && selectedCustomer ? (
                         <>
-                            <DialogHeader className="space-y-0 rounded-t-lg -mx-4 -mt-4 mb-2 border-b border-amber-500/30 bg-amber-500/15 px-4 py-3">
+                            <DialogHeader className="shrink-0 space-y-0 rounded-t-xl border-b border-amber-500/30 bg-amber-500/15 px-4 py-3">
                                 <div className="flex items-start gap-3">
                                     <TriangleAlert className="mt-0.5 size-6 shrink-0 text-amber-700 dark:text-amber-400" aria-hidden />
-                                    <div>
-                                        <DialogTitle className="text-amber-950 dark:text-amber-50">ID Verification Required</DialogTitle>
-                                        <DialogDescription className="text-amber-900/85 dark:text-amber-100/80">
+                                    <div className="min-w-0 flex-1">
+                                        <DialogTitle className="text-balance leading-snug text-amber-950 dark:text-amber-50">
+                                            ID Verification Required
+                                        </DialogTitle>
+                                        <DialogDescription className="mt-1.5 text-pretty text-amber-900/90 dark:text-amber-100/85">
                                             This medicine cannot be supplied without recording ID verification for this customer.
                                         </DialogDescription>
                                     </div>
                                 </div>
                             </DialogHeader>
 
-                            <div className="space-y-3 text-sm">
+                            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3">
+                                <div className="space-y-3 text-sm">
                                 <Card className="border-border bg-muted/30">
                                     <CardHeader className="py-2 pb-1">
                                         <CardTitle className="text-sm font-medium">Customer</CardTitle>
@@ -1145,9 +1211,10 @@ export default function NewPrescription() {
                                         onChange={(e) => setAgeModalNotes(e.target.value)}
                                     />
                                 </div>
+                                </div>
                             </div>
 
-                            <DialogFooter className="flex-col gap-2 sm:items-stretch">
+                            <DialogFooter className="mx-0 mb-0 mt-0 shrink-0 flex-col gap-2 rounded-b-xl border-t bg-muted/50 px-4 py-3 sm:flex-col sm:items-stretch sm:justify-start">
                                 <Button
                                     type="button"
                                     className="w-full bg-emerald-600 text-white hover:bg-emerald-500"

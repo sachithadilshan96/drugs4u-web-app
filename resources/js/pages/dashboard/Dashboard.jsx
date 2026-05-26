@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ClipboardPlus } from 'lucide-react';
-import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { ClipboardPlus, TriangleAlert } from 'lucide-react';
+import { CartesianGrid, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis, Cell } from 'recharts';
 import { toast } from 'sonner';
 import * as customersApi from '@/api/customers';
 import * as dashboardApi from '@/api/dashboard';
@@ -25,6 +25,7 @@ import {
 function statusBadgeClass(status) {
     switch (status) {
         case 'dispensed':
+        case 'dispatched':
             return 'border-teal-500/50 bg-teal-950/40 text-teal-100';
         case 'rejected':
             return 'border-red-500/50 bg-red-950/40 text-red-100';
@@ -82,12 +83,14 @@ export default function Dashboard() {
         prescriptionsToday: 0,
         customersTotal: 0,
         lowStockMedicines: 0,
-        pending: 0,
+                pending: 0,
+                readyToDispatch: 0,
+                awaitingBilling: 0,
+                pendingApproval: 0,
     });
     const [recent, setRecent] = useState([]);
     const [lowStockRows, setLowStockRows] = useState([]);
     const [analytics, setAnalytics] = useState(null);
-    const [statusBusyId, setStatusBusyId] = useState(null);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -96,7 +99,7 @@ export default function Dashboard() {
                 prescriptionsApi.listPrescriptions({ date: 'today', per_page: 1 }),
                 customersApi.getCustomers(1, ''),
                 inventoryApi.getLowStockInventory(),
-                prescriptionsApi.listPrescriptions({ status: 'pending', per_page: 1 }),
+                prescriptionsApi.listPrescriptions({ status: 'draft', per_page: 1 }),
                 prescriptionsApi.listPrescriptions({ per_page: 5 }),
             ]);
 
@@ -108,18 +111,22 @@ export default function Dashboard() {
                 customersTotal: Number(customersRes.data?.meta?.total ?? 0),
                 lowStockMedicines: lowMedicineCount,
                 pending: Number(pendingRes.data?.total ?? 0),
+                readyToDispatch: 0,
+                awaitingBilling: 0,
             });
             setRecent(Array.isArray(recentRes.data?.data) ? recentRes.data.data : []);
             setLowStockRows(lowData);
 
-            if (isManagerLike) {
-                try {
-                    const an = await dashboardApi.getDashboardAnalytics();
-                    setAnalytics(an.data?.data ?? null);
-                } catch {
-                    setAnalytics(null);
-                }
-            } else {
+            try {
+                const an = await dashboardApi.getDashboardAnalytics();
+                setAnalytics(an.data?.data ?? null);
+                setStats((prev) => ({
+                    ...prev,
+                    readyToDispatch: Number(an.data?.data?.ready_to_dispatch ?? 0),
+                    awaitingBilling: Number(an.data?.data?.awaiting_billing ?? 0),
+                    pendingApproval: Number(an.data?.data?.pending_approval ?? 0),
+                }));
+            } catch {
                 setAnalytics(null);
             }
         } catch (e) {
@@ -136,22 +143,6 @@ export default function Dashboard() {
         void load();
     }, [load]);
 
-    const onStatus = useCallback(
-        async (id, status) => {
-            setStatusBusyId(id);
-            try {
-                await prescriptionsApi.updatePrescriptionStatus(id, status);
-                toast.success(status === 'dispensed' ? 'Marked dispensed.' : 'Marked rejected.');
-                await load();
-            } catch (e) {
-                toast.error(e.response?.data?.message ?? 'Status update failed.');
-            } finally {
-                setStatusBusyId(null);
-            }
-        },
-        [load],
-    );
-
     const lowStockClass = stats.lowStockMedicines > 0 ? 'text-destructive' : '';
 
     return (
@@ -160,6 +151,22 @@ export default function Dashboard() {
                 <h1 className="font-heading text-2xl font-semibold tracking-tight">Dashboard</h1>
                 <p className="mt-1 text-sm text-muted-foreground">Overview for Drugs 4U store operations.</p>
             </div>
+
+            {isManagerLike && !loading && stats.pendingApproval > 0 ? (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-orange-500/40 bg-orange-950/25 px-4 py-3 text-sm text-orange-50">
+                    <div className="flex items-center gap-2">
+                        <TriangleAlert className="size-5 shrink-0 text-orange-300" aria-hidden />
+                        <span>
+                            <span className="font-semibold">{stats.pendingApproval}</span>
+                            {' '}
+                            prescription{stats.pendingApproval === 1 ? '' : 's'} need manager approval (allergy / age flags).
+                        </span>
+                    </div>
+                    <Button asChild size="sm" className="bg-orange-600 text-white hover:bg-orange-500">
+                        <Link to="/prescriptions/pending-review">Review queue</Link>
+                    </Button>
+                </div>
+            ) : null}
 
             {loading ? (
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -187,6 +194,8 @@ export default function Dashboard() {
                         valueClassName={lowStockClass}
                     />
                     <StatCard title="Pending prescriptions" value={stats.pending} />
+                    <StatCard title="Ready to Dispatch" value={stats.readyToDispatch} />
+                    <StatCard title="Awaiting Billing" value={stats.awaitingBilling} />
                 </div>
             )}
 
@@ -239,6 +248,31 @@ export default function Dashboard() {
                             ) : (
                                 <p className="text-sm text-muted-foreground">No dispensations recorded in this period.</p>
                             )}
+                        </CardContent>
+                    </Card>
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="text-lg">NHS vs Private (today)</CardTitle>
+                        </CardHeader>
+                        <CardContent className="h-72">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie
+                                        data={[
+                                            { name: 'NHS', value: analytics.nhs_private_split_today?.nhs ?? 0 },
+                                            { name: 'Private', value: analytics.nhs_private_split_today?.private ?? 0 },
+                                        ]}
+                                        dataKey="value"
+                                        nameKey="name"
+                                        outerRadius={80}
+                                        label
+                                    >
+                                        <Cell fill="#2563eb" />
+                                        <Cell fill="#9333ea" />
+                                    </Pie>
+                                    <Tooltip />
+                                </PieChart>
+                            </ResponsiveContainer>
                         </CardContent>
                     </Card>
                 </div>
@@ -294,29 +328,9 @@ export default function Dashboard() {
                                                         <Button variant="ghost" size="sm" asChild>
                                                             <Link to={`/prescriptions/${r.id}`}>View</Link>
                                                         </Button>
-                                                        {r.status === 'pending' ? (
-                                                            <>
-                                                                <Button
-                                                                    type="button"
-                                                                    size="sm"
-                                                                    className="bg-teal-600 text-white hover:bg-teal-500"
-                                                                    disabled={statusBusyId === r.id}
-                                                                    onClick={() => void onStatus(r.id, 'dispensed')}
-                                                                >
-                                                                    Dispense
-                                                                </Button>
-                                                                <Button
-                                                                    type="button"
-                                                                    size="sm"
-                                                                    variant="outline"
-                                                                    className="text-destructive hover:text-destructive"
-                                                                    disabled={statusBusyId === r.id}
-                                                                    onClick={() => void onStatus(r.id, 'rejected')}
-                                                                >
-                                                                    Reject
-                                                                </Button>
-                                                            </>
-                                                        ) : null}
+                                                        <Button variant="ghost" size="sm" asChild>
+                                                            <Link to={`/prescriptions/${r.id}`}>Open</Link>
+                                                        </Button>
                                                     </div>
                                                 </TableCell>
                                             </TableRow>

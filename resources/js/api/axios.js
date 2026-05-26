@@ -2,8 +2,9 @@ import axios from 'axios';
 
 /**
  * Read Laravel XSRF-TOKEN cookie (set on web responses; used with Sanctum / session SPA).
+ * Exported for non-axios `fetch` calls that must include `X-XSRF-TOKEN` on stateful API routes.
  */
-function readXsrfToken() {
+export function readXsrfToken() {
     const match = document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]*)/);
     return match ? decodeURIComponent(match[1]) : null;
 }
