@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
-import { LogOut, Menu, Pill } from 'lucide-react';
+import { ChevronDown, ChevronRight, LogOut, Menu, Pill } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { pageTitleForPath } from '@/lib/routeAccess';
 import * as prescriptionsApi from '@/api/prescriptions';
@@ -17,78 +17,203 @@ import {
 import { cn } from '@/lib/utils';
 import { PageErrorBoundary } from '@/components/layout/PageErrorBoundary';
 
-/** @type {Array<{ to: string; label: string; roles: string[]; end?: boolean; indent?: boolean; badgeKey?: 'pending_review' }>} */
-const NAV_ITEMS = [
-    { to: '/dashboard', label: 'Dashboard', roles: ['pharmacist', 'manager', 'admin'] },
-    { to: '/customers', label: 'Customers', roles: ['pharmacist', 'admin'], end: true },
-    { to: '/prescriptions', label: 'Prescriptions', roles: ['pharmacist', 'admin'] },
+/**
+ * @typedef {{ to: string; label: string; roles: string[]; end?: boolean; indent?: boolean; badgeKey?: 'pending_review' }} NavItem
+ * @typedef {{ id: string; label: string; items: NavItem[] }} NavSection
+ */
+
+/** @type {NavSection[]} */
+const NAV_SECTIONS = [
     {
-        to: '/prescriptions/pending-review',
-        label: 'Pending review',
-        roles: ['manager', 'admin'],
-        indent: true,
-        badgeKey: 'pending_review',
+        id: 'overview',
+        label: 'Overview',
+        items: [{ to: '/dashboard', label: 'Dashboard', roles: ['pharmacist', 'manager', 'admin'] }],
     },
-    { to: '/medicines', label: 'Medicines', roles: ['manager', 'admin'] },
     {
-        to: '/medicines/add',
-        label: 'Add medicine',
-        roles: ['manager', 'admin'],
-        indent: true,
+        id: 'customers',
+        label: 'Customers',
+        items: [
+            { to: '/customers', label: 'All customers', roles: ['pharmacist', 'admin'], end: true },
+            { to: '/customers/new', label: 'Add customer', roles: ['pharmacist', 'admin'], indent: true },
+        ],
     },
-    { to: '/suppliers', label: 'Suppliers', roles: ['manager', 'admin'] },
     {
-        to: '/suppliers/add',
-        label: 'Add supplier',
-        roles: ['manager', 'admin'],
-        indent: true,
+        id: 'prescriptions',
+        label: 'Prescriptions',
+        items: [
+            { to: '/prescriptions', label: 'All prescriptions', roles: ['pharmacist', 'admin'], end: true },
+            { to: '/prescriptions/new', label: 'New prescription', roles: ['pharmacist', 'admin'], end: true, indent: true },
+            {
+                to: '/prescriptions/pending-review',
+                label: 'Pending review',
+                roles: ['manager', 'admin'],
+                indent: true,
+                badgeKey: 'pending_review',
+            },
+        ],
     },
-    { to: '/inventory', label: 'Inventory', roles: ['pharmacist', 'manager', 'admin'] },
-    { to: '/reports', label: 'Reports', roles: ['manager', 'admin'] },
-    { to: '/alerts', label: 'Alerts log', roles: ['admin'] },
+    {
+        id: 'catalog',
+        label: 'Medicines & supply',
+        items: [
+            { to: '/medicines', label: 'Medicines', roles: ['manager', 'admin'] },
+            { to: '/medicines/add', label: 'Add medicine', roles: ['manager', 'admin'], indent: true },
+            { to: '/suppliers', label: 'Suppliers', roles: ['manager', 'admin'] },
+            { to: '/suppliers/add', label: 'Add supplier', roles: ['manager', 'admin'], indent: true },
+            { to: '/inventory', label: 'Inventory', roles: ['pharmacist', 'manager', 'admin'] },
+        ],
+    },
+    {
+        id: 'reporting',
+        label: 'Reporting',
+        items: [
+            { to: '/reports', label: 'Reports', roles: ['manager', 'admin'] },
+            { to: '/alerts', label: 'Alerts log', roles: ['admin'] },
+        ],
+    },
 ];
 
-function navClass({ isActive }) {
+/**
+ * Sub-item links: slightly smaller than section headers for clear hierarchy.
+ * @param {{ isActive: boolean; subItem?: boolean }} p
+ */
+function navClass({ isActive, subItem = true }) {
     return cn(
-        'block rounded-md px-3 py-2 text-sm font-medium transition-colors',
+        'block rounded-md px-3 py-2 font-medium transition-colors',
+        subItem ? 'text-xs leading-snug' : 'text-sm',
         isActive
             ? 'bg-teal-600/90 text-white shadow-sm'
-            : 'text-slate-300 hover:bg-slate-800 hover:text-white',
+            : 'text-slate-300/95 hover:bg-slate-800 hover:text-white',
     );
+}
+
+/**
+ * @param {string} pathname
+ * @param {NavItem} item
+ */
+function pathMatchesItem(pathname, item) {
+    if (item.end) {
+        return pathname === item.to;
+    }
+    if (pathname === item.to) {
+        return true;
+    }
+    return pathname.startsWith(`${item.to}/`);
+}
+
+/**
+ * @param {string} pathname
+ * @param {string | undefined} role
+ * @returns {string | null} section id that should be expanded for the current route
+ */
+function sectionIdForPath(pathname, role) {
+    if (role && /^\/prescriptions\/\d+/.test(pathname)) {
+        return 'prescriptions';
+    }
+    if (role && /^\/customers\/\d+/.test(pathname)) {
+        return 'customers';
+    }
+    for (const sec of NAV_SECTIONS) {
+        const vis = sec.items.filter((i) => role && i.roles.includes(role));
+        for (const item of vis) {
+            if (pathMatchesItem(pathname, item)) {
+                return sec.id;
+            }
+        }
+    }
+    return null;
 }
 
 /**
  * @param {{ role?: string; onNavigate?: () => void; pendingReviewCount?: number }} props
  */
 function SidebarNav({ role, onNavigate, pendingReviewCount = 0 }) {
-    const items = NAV_ITEMS.filter((item) => role && item.roles.includes(role));
+    const { pathname } = useLocation();
+    const [open, setOpen] = useState(() => ({
+        overview: true,
+        customers: true,
+        prescriptions: true,
+        catalog: true,
+        reporting: true,
+    }));
+
+    useEffect(() => {
+        const id = sectionIdForPath(pathname, role);
+        if (id) {
+            setOpen((s) => ({ ...s, [id]: true }));
+        }
+    }, [pathname, role]);
+
+    const visibleSections = useMemo(() => {
+        return NAV_SECTIONS.map((sec) => ({
+            ...sec,
+            items: sec.items.filter((i) => role && i.roles.includes(role)),
+        })).filter((sec) => sec.items.length > 0);
+    }, [role]);
+
+    const toggle = useCallback((id) => {
+        setOpen((s) => {
+            const isCurrentlyOpen = s[id] !== false;
+            return { ...s, [id]: !isCurrentlyOpen };
+        });
+    }, []);
 
     return (
-        <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-2 py-2" aria-label="Main">
-            {items.map(({ to, label, end, indent, badgeKey }) => (
-                <NavLink
-                    key={to}
-                    to={to}
-                    end={end}
-                    className={({ isActive }) =>
-                        cn(navClass({ isActive }), indent ? 'ml-3 border-l border-slate-700/80 pl-3' : null)
-                    }
-                    onClick={() => onNavigate?.()}
-                >
-                    <span className="flex items-center justify-between gap-2">
-                        <span>{label}</span>
-                        {badgeKey === 'pending_review' && pendingReviewCount > 0 ? (
-                            <Badge
-                                variant="destructive"
-                                className="min-w-6 justify-center px-1.5 text-[10px] tabular-nums"
-                                aria-label={`${pendingReviewCount} prescriptions awaiting review`}
+        <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-2 py-2" aria-label="Main">
+            {visibleSections.map((sec) => {
+                const isOpen = open[sec.id] !== false;
+                return (
+                    <div key={sec.id} className="rounded-md">
+                        {sec.items.length > 0 ? (
+                            <button
+                                type="button"
+                                className="flex w-full items-center justify-between gap-1 rounded-md px-2 py-2 text-left text-sm font-semibold leading-tight tracking-wide text-slate-200 transition-colors hover:bg-slate-800/80 hover:text-white"
+                                onClick={() => toggle(sec.id)}
+                                aria-expanded={isOpen}
+                                aria-controls={`nav-section-${sec.id}`}
                             >
-                                {pendingReviewCount > 99 ? '99+' : pendingReviewCount}
-                            </Badge>
+                                <span>{sec.label}</span>
+                                {isOpen ? <ChevronDown className="size-4 shrink-0 opacity-80" /> : <ChevronRight className="size-4 shrink-0 opacity-80" />}
+                            </button>
                         ) : null}
-                    </span>
-                </NavLink>
-            ))}
+                        {isOpen ? (
+                            <div
+                                id={`nav-section-${sec.id}`}
+                                className="mt-0.5 flex flex-col gap-0.5 pl-0"
+                                role="group"
+                            >
+                                {sec.items.map(({ to, label, end, indent, badgeKey }) => (
+                                    <NavLink
+                                        key={to}
+                                        to={to}
+                                        end={end}
+                                        className={({ isActive }) =>
+                                            cn(
+                                                navClass({ isActive, subItem: true }),
+                                                indent ? 'ml-3 border-l border-slate-700/80 pl-3' : null,
+                                            )
+                                        }
+                                        onClick={() => onNavigate?.()}
+                                    >
+                                        <span className="flex items-center justify-between gap-2">
+                                            <span>{label}</span>
+                                            {badgeKey === 'pending_review' && pendingReviewCount > 0 ? (
+                                                <Badge
+                                                    variant="destructive"
+                                                    className="min-w-6 justify-center px-1.5 text-[10px] tabular-nums"
+                                                    aria-label={`${pendingReviewCount} prescriptions awaiting review`}
+                                                >
+                                                    {pendingReviewCount > 99 ? '99+' : pendingReviewCount}
+                                                </Badge>
+                                            ) : null}
+                                        </span>
+                                    </NavLink>
+                                ))}
+                            </div>
+                        ) : null}
+                    </div>
+                );
+            })}
         </nav>
     );
 }
@@ -96,7 +221,11 @@ function SidebarNav({ role, onNavigate, pendingReviewCount = 0 }) {
 function SidebarAdminLink({ onNavigate }) {
     return (
         <div className="px-2 pb-2">
-            <NavLink to="/admin/users" className={navClass} onClick={() => onNavigate?.()}>
+            <NavLink
+                to="/admin/users"
+                className={({ isActive }) => navClass({ isActive, subItem: false })}
+                onClick={() => onNavigate?.()}
+            >
                 User Management
             </NavLink>
         </div>
