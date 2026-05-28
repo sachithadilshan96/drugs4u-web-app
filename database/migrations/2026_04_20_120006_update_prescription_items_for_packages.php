@@ -17,6 +17,8 @@ return new class extends Migration
             Schema::table('prescription_items', function (Blueprint $table) {
                 $table->unsignedBigInteger('package_id')->nullable()->after('prescription_id');
             });
+        } else {
+            $this->makePrescriptionItemsPackageIdNullableOnMysql();
         }
 
         if (Schema::hasColumn('prescription_items', 'medicine_id')) {
@@ -123,19 +125,41 @@ return new class extends Migration
         }
         $validIds = DB::table('medicine_packages')->pluck('id')->all();
         if ($validIds === []) {
-            DB::table('prescription_items')->update(['package_id' => null]);
+            // No packages exist; lines cannot reference one — remove rows (cannot SET NULL if column is NOT NULL).
+            DB::table('prescription_items')->delete();
 
             return;
         }
-        $invalid = DB::table('prescription_items')
+        // Drop invalid package references; never assign NULL to NOT NULL column (partially migrated DBs).
+        DB::table('prescription_items')
             ->whereNotNull('package_id')
             ->whereNotIn('package_id', $validIds)
-            ->pluck('id');
-        foreach ($invalid as $id) {
-            DB::table('prescription_items')->where('id', $id)->update(['package_id' => null]);
-        }
+            ->delete();
         if (Schema::hasColumn('prescription_items', 'medicine_id')) {
             $this->backfillPackageIdFromMedicine();
+        }
+    }
+
+    /**
+     * If a previous run left `package_id` NOT NULL, allow cleanup by making it nullable again (MySQL only).
+     */
+    private function makePrescriptionItemsPackageIdNullableOnMysql(): void
+    {
+        if (Schema::getConnection()->getDriverName() !== 'mysql') {
+            return;
+        }
+        $row = DB::selectOne(
+            "SELECT IS_NULLABLE AS n FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'prescription_items' AND COLUMN_NAME = 'package_id'",
+            [DB::getDatabaseName()]
+        );
+        if ($row && ($row->n ?? '') === 'NO') {
+            if ($this->hasForeignKey('prescription_items', 'package_id', 'medicine_packages')) {
+                Schema::table('prescription_items', function (Blueprint $table) {
+                    $table->dropForeign(['package_id']);
+                });
+            }
+            DB::statement('ALTER TABLE prescription_items MODIFY package_id BIGINT UNSIGNED NULL');
         }
     }
 
