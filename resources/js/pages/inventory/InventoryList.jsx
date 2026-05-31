@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronDown, ChevronLeft, ChevronRight, Plus, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import * as inventoryApi from '@/api/inventory';
@@ -82,6 +82,7 @@ export default function InventoryList() {
     const addStockFromQuery = searchParams.get('addStock');
     const packageIdFromQuery = searchParams.get('packageId');
     const medicineIdFromQuery = searchParams.get('medicineId');
+    const lowStockOnly = searchParams.get('lowStock') === '1';
 
     const [loading, setLoading] = useState(true);
     const [rows, setRows] = useState([]);
@@ -156,6 +157,20 @@ export default function InventoryList() {
     const load = useCallback(async () => {
         setLoading(true);
         try {
+            if (lowStockOnly) {
+                const { data } = await inventoryApi.getLowStockInventory();
+                const lowRows = Array.isArray(data?.data) ? data.data : [];
+                setRows(lowRows);
+                setMeta({
+                    current_page: 1,
+                    last_page: 1,
+                    from: lowRows.length > 0 ? 1 : 0,
+                    to: lowRows.length,
+                    total: lowRows.length,
+                });
+                return;
+            }
+
             const { data } = await inventoryApi.listInventory({
                 page,
                 search: debouncedSearch || undefined,
@@ -175,7 +190,7 @@ export default function InventoryList() {
         } finally {
             setLoading(false);
         }
-    }, [page, debouncedSearch]);
+    }, [page, debouncedSearch, lowStockOnly]);
 
     useEffect(() => {
         void load();
@@ -350,9 +365,18 @@ export default function InventoryList() {
                 <CardHeader>
                     <CardTitle>Stock list</CardTitle>
                     <CardDescription>
-                        Search by medicine name, package description, or unit. Stock is grouped by product; expand a row to see
-                        each package batch on this page.
+                        {lowStockOnly
+                            ? 'Showing batches below the low-stock threshold (under 10 units).'
+                            : 'Search by medicine name, package description, or unit. Stock is grouped by product; expand a row to see each package batch on this page.'}
                     </CardDescription>
+                    {lowStockOnly ? (
+                        <p className="text-xs text-teal-600 dark:text-teal-400">
+                            Filter: low stock only ·{' '}
+                            <Link to="/inventory" className="underline underline-offset-2 hover:text-teal-500">
+                                Show all inventory
+                            </Link>
+                        </p>
+                    ) : null}
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <div className="relative max-w-md">

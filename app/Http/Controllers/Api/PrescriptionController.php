@@ -60,6 +60,9 @@ class PrescriptionController extends Controller
         if ($request->filled('date_to')) {
             $query->whereDate('created_at', '<=', $request->date('date_to'));
         }
+        if ($request->boolean('awaiting_billing')) {
+            $query->where('status', 'dispatched')->whereDoesntHave('bill');
+        }
 
         $paginator = $query->paginate(15)->withQueryString();
 

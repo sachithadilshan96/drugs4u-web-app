@@ -1,10 +1,15 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, ClipboardPlus } from 'lucide-react';
 import { toast } from 'sonner';
 import * as prescriptionsApi from '@/api/prescriptions';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useAuthStore } from '@/store/authStore';
+import {
+    parsePrescriptionListFilters,
+    prescriptionListApiParams,
+    prescriptionListSearchString,
+} from '@/lib/prescriptionListFilters';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -93,36 +98,53 @@ export default function PrescriptionList() {
     useDocumentTitle('Prescriptions');
 
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const role = useAuthStore((s) => s.user?.role);
+
+    const urlFilters = useMemo(() => parsePrescriptionListFilters(searchParams), [searchParams]);
+
     const [loading, setLoading] = useState(true);
     const [rows, setRows] = useState([]);
     const [meta, setMeta] = useState(null);
-
-    const [status, setStatus] = useState('');
-    const [dateFrom, setDateFrom] = useState('');
-    const [dateTo, setDateTo] = useState('');
+    const [status, setStatus] = useState(urlFilters.status);
+    const [dateFrom, setDateFrom] = useState(urlFilters.dateFrom);
+    const [dateTo, setDateTo] = useState(urlFilters.dateTo);
+    const [datePreset, setDatePreset] = useState(urlFilters.datePreset);
+    const [awaitingBilling, setAwaitingBilling] = useState(urlFilters.awaitingBilling);
     const [page, setPage] = useState(1);
 
     useEffect(() => {
+        setStatus(urlFilters.status);
+        setAwaitingBilling(urlFilters.awaitingBilling);
+        setDatePreset(urlFilters.datePreset);
+        setDateFrom(urlFilters.dateFrom);
+        setDateTo(urlFilters.dateTo);
         setPage(1);
-    }, [status, dateFrom, dateTo]);
+    }, [urlFilters]);
+
+    const syncFiltersToUrl = useCallback(
+        (next) => {
+            navigate(
+                { pathname: '/prescriptions', search: prescriptionListSearchString(next) },
+                { replace: true },
+            );
+        },
+        [navigate],
+    );
 
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            const params = { page };
-            if (status) {
-                params.status = status;
-            }
-            if (dateFrom) {
-                params.date_from = dateFrom;
-            }
-            if (dateTo) {
-                params.date_to = dateTo;
-            }
+            const params = prescriptionListApiParams({
+                page,
+                status,
+                awaitingBilling,
+                datePreset,
+                dateFrom,
+                dateTo,
+            });
             const { data } = await prescriptionsApi.listPrescriptions(params);
             setRows(data.data ?? []);
-            // Laravel paginator fields live on the JSON root, not under `meta`.
             setMeta({
                 current_page: data.current_page,
                 last_page: data.last_page,
@@ -137,7 +159,7 @@ export default function PrescriptionList() {
         } finally {
             setLoading(false);
         }
-    }, [page, status, dateFrom, dateTo]);
+    }, [page, status, dateFrom, dateTo, datePreset, awaitingBilling]);
 
     useEffect(() => {
         load();
@@ -166,10 +188,40 @@ export default function PrescriptionList() {
                 <CardHeader className="space-y-1 pb-4">
                     <CardTitle className="text-lg">Filters</CardTitle>
                     <CardDescription>Restrict by status and creation date.</CardDescription>
+                    {(status || awaitingBilling || datePreset === 'today' || dateFrom || dateTo) ? (
+                        <p className="text-xs text-teal-600 dark:text-teal-400">
+                            Filters active
+                            {datePreset === 'today' ? ' · today' : ''}
+                            {status ? ` · ${statusLabel(status)}` : ''}
+                            {awaitingBilling ? ' · awaiting billing' : ''}
+                            {' · '}
+                            <Link to="/prescriptions" className="underline underline-offset-2 hover:text-teal-500">
+                                Clear all
+                            </Link>
+                        </p>
+                    ) : null}
                     <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
                         <div className="space-y-1.5 sm:w-44">
                             <Label>Status</Label>
-                            <Select value={status || 'all'} onValueChange={(v) => setStatus(v === 'all' ? '' : v)}>
+                            <Select
+                                value={status || 'all'}
+                                onValueChange={(v) => {
+                                    const nextStatus = v === 'all' ? '' : v;
+                                    setStatus(nextStatus);
+                                    setAwaitingBilling(false);
+                                    setDatePreset('');
+                                    setDateFrom('');
+                                    setDateTo('');
+                                    setPage(1);
+                                    syncFiltersToUrl({
+                                        status: nextStatus,
+                                        awaitingBilling: false,
+                                        datePreset: '',
+                                        dateFrom: '',
+                                        dateTo: '',
+                                    });
+                                }}
+                            >
                                 <SelectTrigger>
                                     <SelectValue placeholder="All statuses" />
                                 </SelectTrigger>
@@ -186,11 +238,47 @@ export default function PrescriptionList() {
                         </div>
                         <div className="space-y-1.5">
                             <Label htmlFor="df">From</Label>
-                            <Input id="df" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="sm:w-40" />
+                            <Input
+                                id="df"
+                                type="date"
+                                value={dateFrom}
+                                onChange={(e) => {
+                                    const next = e.target.value;
+                                    setDatePreset('');
+                                    setDateFrom(next);
+                                    setPage(1);
+                                    syncFiltersToUrl({
+                                        status,
+                                        awaitingBilling,
+                                        datePreset: '',
+                                        dateFrom: next,
+                                        dateTo,
+                                    });
+                                }}
+                                className="sm:w-40"
+                            />
                         </div>
                         <div className="space-y-1.5">
                             <Label htmlFor="dt">To</Label>
-                            <Input id="dt" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="sm:w-40" />
+                            <Input
+                                id="dt"
+                                type="date"
+                                value={dateTo}
+                                onChange={(e) => {
+                                    const next = e.target.value;
+                                    setDatePreset('');
+                                    setDateTo(next);
+                                    setPage(1);
+                                    syncFiltersToUrl({
+                                        status,
+                                        awaitingBilling,
+                                        datePreset: '',
+                                        dateFrom,
+                                        dateTo: next,
+                                    });
+                                }}
+                                className="sm:w-40"
+                            />
                         </div>
                     </div>
                 </CardHeader>

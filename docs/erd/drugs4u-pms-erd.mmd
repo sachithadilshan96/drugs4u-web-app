@@ -1,0 +1,118 @@
+erDiagram
+    USER {
+        bigint id PK
+        string username
+        enum role
+    }
+    CUSTOMER {
+        bigint id PK
+        string full_name
+        date dob
+        string phone
+    }
+    CUSTOMER_HEALTH {
+        bigint id PK
+        bigint customer_id FK
+        text medication_allergies
+    }
+    MEDICINE {
+        bigint id PK
+        string name
+        string rxcui
+        boolean requires_age_check
+    }
+    MEDICINE_VARIANT {
+        bigint id PK
+        bigint medicine_id FK
+        bigint supplier_id FK
+        string strength
+    }
+    MEDICINE_PACKAGE {
+        bigint id PK
+        bigint variant_id FK
+        bigint supplier_id FK
+        string barcode
+    }
+    SUPPLIER {
+        bigint id PK
+        string name
+        boolean is_active
+    }
+    MEDICINE_SUPPLIER {
+        bigint id PK
+        bigint medicine_id FK
+        bigint supplier_id FK
+        decimal unit_cost
+    }
+    INVENTORY {
+        bigint id PK
+        bigint package_id FK
+        bigint supplier_id FK
+        int quantity
+        date expiry_date
+    }
+    PRESCRIPTION {
+        bigint id PK
+        bigint customer_id FK
+        bigint pharmacist_id FK
+        enum status
+        enum prescription_type
+    }
+    PRESCRIPTION_ITEM {
+        bigint id PK
+        bigint prescription_id FK
+        bigint package_id FK
+        int quantity
+        decimal line_total
+    }
+    MEDICATION_HISTORY {
+        bigint id PK
+        bigint customer_id FK
+        bigint prescription_id FK
+        bigint medicine_id FK
+        timestamp dispensed_at
+    }
+    BILL {
+        bigint id PK
+        bigint prescription_id FK
+        string bill_number
+        enum payment_status
+        bigint generated_by FK
+    }
+    AGE_VERIFICATION_LOG {
+        bigint id PK
+        bigint prescription_id FK
+        bigint medicine_id FK
+        bigint customer_id FK
+        bigint pharmacist_id FK
+        enum outcome
+    }
+    ALERTS_LOG {
+        bigint id PK
+        string alert_type
+        bigint reference_id
+        boolean dismissed
+    }
+
+    CUSTOMER ||--o| CUSTOMER_HEALTH : has
+    CUSTOMER ||--o{ PRESCRIPTION : places
+    USER ||--o{ PRESCRIPTION : prescribes
+    USER ||--o{ BILL : generates
+    PRESCRIPTION ||--|{ PRESCRIPTION_ITEM : contains
+    MEDICINE_PACKAGE ||--o{ PRESCRIPTION_ITEM : package
+    PRESCRIPTION ||--o| BILL : billed
+    MEDICINE ||--|{ MEDICINE_VARIANT : variant
+    MEDICINE_VARIANT ||--|{ MEDICINE_PACKAGE : pack
+    SUPPLIER ||--o{ MEDICINE_VARIANT : supplies
+    SUPPLIER ||--o{ MEDICINE_PACKAGE : supplies
+    MEDICINE ||--|{ MEDICINE_SUPPLIER : via
+    SUPPLIER ||--|{ MEDICINE_SUPPLIER : via
+    MEDICINE_PACKAGE ||--o{ INVENTORY : stock
+    SUPPLIER ||--o{ INVENTORY : batch
+    PRESCRIPTION ||--o{ MEDICATION_HISTORY : history
+    CUSTOMER ||--o{ MEDICATION_HISTORY : received
+    MEDICINE ||--o{ MEDICATION_HISTORY : medicine
+    PRESCRIPTION ||--o{ AGE_VERIFICATION_LOG : age_check
+    CUSTOMER ||--o{ AGE_VERIFICATION_LOG : customer
+    MEDICINE ||--o{ AGE_VERIFICATION_LOG : medicine
+    USER ||--o{ AGE_VERIFICATION_LOG : pharmacist

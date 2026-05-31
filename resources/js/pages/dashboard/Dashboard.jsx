@@ -60,15 +60,31 @@ function formatWhen(iso) {
     }
 }
 
-function StatCard({ title, value, description, valueClassName }) {
-    return (
-        <Card>
+function StatCard({ title, value, description, valueClassName, to }) {
+    const content = (
+        <>
             <CardHeader className="pb-2">
                 <CardDescription>{title}</CardDescription>
                 <CardTitle className={`text-3xl tabular-nums ${valueClassName ?? ''}`}>{value}</CardTitle>
             </CardHeader>
             {description ? <CardContent className="pt-0 text-xs text-muted-foreground">{description}</CardContent> : null}
-        </Card>
+        </>
+    );
+
+    if (!to) {
+        return <Card>{content}</Card>;
+    }
+
+    return (
+        <Link
+            to={to}
+            className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            aria-label={`${title}: ${value}. View details.`}
+        >
+            <Card className="h-full cursor-pointer transition-colors hover:border-teal-500/40 hover:bg-muted/30">
+                {content}
+            </Card>
+        </Link>
     );
 }
 
@@ -181,21 +197,31 @@ export default function Dashboard() {
                 </div>
             ) : (
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    <StatCard title="Prescriptions today" value={stats.prescriptionsToday} />
+                    <StatCard
+                        title="Prescriptions today"
+                        value={stats.prescriptionsToday}
+                        to="/prescriptions?date=today"
+                    />
                     <StatCard
                         title="Active customers"
                         value={stats.customersTotal}
                         description="Registered customer records"
+                        to="/customers"
                     />
                     <StatCard
                         title="Low stock medicines"
                         value={stats.lowStockMedicines}
                         description="Distinct medicines with a batch under threshold"
                         valueClassName={lowStockClass}
+                        to="/inventory?lowStock=1"
                     />
-                    <StatCard title="Pending prescriptions" value={stats.pending} />
-                    <StatCard title="Ready to Dispatch" value={stats.readyToDispatch} />
-                    <StatCard title="Awaiting Billing" value={stats.awaitingBilling} />
+                    <StatCard title="Pending prescriptions" value={stats.pending} to="/prescriptions?status=draft" />
+                    <StatCard title="Ready to Dispatch" value={stats.readyToDispatch} to="/prescriptions?status=approved" />
+                    <StatCard
+                        title="Awaiting Billing"
+                        value={stats.awaitingBilling}
+                        to="/prescriptions?status=dispatched&billing=awaiting"
+                    />
                 </div>
             )}
 
@@ -362,7 +388,7 @@ export default function Dashboard() {
                                         key={`${row.id}-${idx}`}
                                         className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm"
                                     >
-                                        <Link className="font-medium text-foreground underline-offset-4 hover:underline" to="/inventory">
+                                        <Link className="font-medium text-foreground underline-offset-4 hover:underline" to="/inventory?lowStock=1">
                                             {row.medicine_name}
                                         </Link>
                                         <p className="text-xs text-muted-foreground">
