@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Customer;
 use App\Models\Prescription;
 use App\Models\PrescriptionItem;
+use App\Models\Supplier;
 use App\Models\User;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -186,5 +187,34 @@ class ReportApiTest extends TestCase
         $this->get('/api/reports/stock?export=csv')
             ->assertOk()
             ->assertHeader('content-type', 'text/csv; charset=UTF-8');
+    }
+
+    public function test_stock_report_falls_back_to_package_supplier_when_batch_supplier_missing(): void
+    {
+        $admin = User::factory()->create([
+            'username' => 'rep_sup',
+            'password' => Hash::make('password'),
+            'role' => 'admin',
+        ]);
+        $this->loginAs($admin);
+
+        $fix = PharmaFixtures::medicineWithPackage([
+            'name' => 'Supplier Fallback Med',
+            'requires_age_check' => false,
+            'min_age' => null,
+            'age_restriction_label' => null,
+            'age_restriction_notes' => null,
+        ]);
+        PharmaFixtures::inventoryForPackage($fix['package'], [
+            'supplier_id' => null,
+            'quantity' => 12,
+            'expiry_date' => now()->addYear()->toDateString(),
+        ]);
+
+        $supplierName = Supplier::query()->findOrFail($fix['variant']->supplier_id)->name;
+
+        $this->getJson('/api/reports/stock')
+            ->assertOk()
+            ->assertJsonPath('data.rows.0.supplier_name', $supplierName);
     }
 }

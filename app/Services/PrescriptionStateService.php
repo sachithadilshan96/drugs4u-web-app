@@ -164,4 +164,49 @@ class PrescriptionStateService
 
         return $prescription->fresh();
     }
+
+    /**
+     * @param  list<array{id: int, quantity: int}>  $items
+     */
+    public function updateDraftItems(Prescription $prescription, array $items): Prescription
+    {
+        if ($prescription->status !== 'draft') {
+            throw ValidationException::withMessages([
+                'status' => 'Only draft prescriptions can be edited. Return an approved prescription to draft first.',
+            ]);
+        }
+
+        $prescription->loadMissing('items');
+        foreach ($items as $row) {
+            $item = $prescription->items->firstWhere('id', (int) $row['id']);
+            if (! $item) {
+                throw ValidationException::withMessages(['items' => 'One or more items do not belong to this prescription.']);
+            }
+            $qty = (int) $row['quantity'];
+            $item->update([
+                'quantity' => $qty,
+                'quantity_dispensed' => $qty,
+                'dispensed_qty' => $qty,
+            ]);
+        }
+
+        return $prescription->fresh(['items']);
+    }
+
+    public function revertToDraft(Prescription $prescription, User $user): Prescription
+    {
+        if ($prescription->status !== 'approved') {
+            throw ValidationException::withMessages(['status' => 'Only approved prescriptions can be returned to draft.']);
+        }
+
+        $prescription->update([
+            'status' => 'draft',
+            'approved_by' => null,
+            'approved_at' => null,
+            'reviewed_by' => null,
+            'reviewed_at' => null,
+        ]);
+
+        return $prescription->fresh();
+    }
 }

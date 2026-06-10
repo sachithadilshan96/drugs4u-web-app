@@ -272,24 +272,70 @@ class PrescriptionController extends Controller
 
     public function dispatch(int $id, Request $request): JsonResponse
     {
+        $prescription = Prescription::query()->with('items')->findOrFail($id);
+
+        if ($request->has('items')) {
+            $validated = $request->validate([
+                'items' => ['required', 'array', 'min:1'],
+                'items.*.id' => ['required', 'integer', 'exists:prescription_items,id'],
+                'items.*.quantity_dispensed' => ['required', 'integer', 'min:1'],
+            ]);
+
+            foreach ($validated['items'] as $row) {
+                $item = $prescription->items->firstWhere('id', (int) $row['id']);
+                if (! $item) {
+                    return response()->json(['message' => 'One or more items do not belong to this prescription.'], 422);
+                }
+                if ((int) $row['quantity_dispensed'] !== (int) $item->quantity_dispensed) {
+                    return response()->json([
+                        'message' => 'Quantities cannot be changed after approval. Return the prescription to draft to edit, then submit for approval again.',
+                    ], 422);
+                }
+            }
+        }
+
+        if ($prescription->items->contains(fn ($item) => (int) $item->quantity_dispensed < 1)) {
+            return response()->json([
+                'message' => 'Each item must have a dispensed quantity before dispatch. Return to draft to set quantities.',
+            ], 422);
+        }
+
+        $updated = $this->stateService->dispatch($prescription, $request->user());
+
+        return response()->json([
+            'data' => $this->serializePrescriptionDetail(
+                $updated->fresh(['items.package.variant.medicine', 'customer', 'pharmacist', 'approver', 'dispatcher', 'bill.generatedBy'])
+            ),
+        ]);
+    }
+
+    public function updateItems(int $id, Request $request): JsonResponse
+    {
         $validated = $request->validate([
             'items' => ['required', 'array', 'min:1'],
             'items.*.id' => ['required', 'integer', 'exists:prescription_items,id'],
-            'items.*.quantity_dispensed' => ['required', 'integer', 'min:1'],
+            'items.*.quantity' => ['required', 'integer', 'min:1', 'max:9999'],
         ]);
 
         $prescription = Prescription::query()->with('items')->findOrFail($id);
-        foreach ($validated['items'] as $row) {
-            $item = $prescription->items->firstWhere('id', (int) $row['id']);
-            if (! $item) {
-                return response()->json(['message' => 'One or more items do not belong to this prescription.'], 422);
-            }
-            $item->update([
-                'quantity_dispensed' => (int) $row['quantity_dispensed'],
-            ]);
-        }
+        $payload = array_map(fn (array $row) => [
+            'id' => (int) $row['id'],
+            'quantity' => (int) $row['quantity'],
+        ], $validated['items']);
 
-        $updated = $this->stateService->dispatch($prescription->fresh('items'), $request->user());
+        $updated = $this->stateService->updateDraftItems($prescription, $payload);
+
+        return response()->json([
+            'data' => $this->serializePrescriptionDetail(
+                $updated->fresh(['items.package.variant.medicine', 'customer', 'pharmacist', 'approver', 'dispatcher', 'bill.generatedBy'])
+            ),
+        ]);
+    }
+
+    public function revertToDraft(int $id, Request $request): JsonResponse
+    {
+        $prescription = Prescription::query()->findOrFail($id);
+        $updated = $this->stateService->revertToDraft($prescription, $request->user());
 
         return response()->json([
             'data' => $this->serializePrescriptionDetail(

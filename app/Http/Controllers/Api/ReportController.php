@@ -250,6 +250,7 @@ class ReportController extends Controller
         $inv->loadMissing('package.variant.medicine', 'supplier');
         $med = $inv->package?->variant?->medicine;
         $pkg = $inv->package;
+        $supplier = $inv->resolvedSupplier();
 
         return [
             'id' => $inv->id,
@@ -260,7 +261,8 @@ class ReportController extends Controller
             'variant_display' => $pkg?->variant?->display_name,
             'package_description' => $pkg?->full_description,
             'package_detail' => $pkg?->package_description,
-            'supplier_name' => $inv->supplier?->name,
+            'supplier_id' => $inv->supplier_id ?? $supplier?->id,
+            'supplier_name' => $supplier?->name,
             'quantity' => $qty,
             'expiry_date' => $exp?->toDateString(),
             'status' => $status,

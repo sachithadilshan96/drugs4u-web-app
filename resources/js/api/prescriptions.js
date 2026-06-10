@@ -63,8 +63,20 @@ export function rejectPrescription(id, reason) {
     return api.post(`/prescriptions/${id}/reject`, { reason });
 }
 
-export function dispatchPrescription(id, items) {
-    return api.post(`/prescriptions/${id}/dispatch`, { items });
+export function dispatchPrescription(id) {
+    return api.post(`/prescriptions/${id}/dispatch`);
+}
+
+/**
+ * @param {number|string} id
+ * @param {Array<{ id: number; quantity: number }>} items
+ */
+export function updatePrescriptionItems(id, items) {
+    return api.patch(`/prescriptions/${id}/items`, { items });
+}
+
+export function revertPrescriptionToDraft(id) {
+    return api.post(`/prescriptions/${id}/revert-to-draft`);
 }
 
 export function cancelPrescription(id) {

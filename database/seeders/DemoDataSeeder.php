@@ -30,6 +30,7 @@ use Illuminate\Support\Facades\Hash;
  *   john  / john      — pharmacist
  *   sarah / sarah     — manager
  *   mike  / mike      — second pharmacist
+ *   pharm01–pharm10   — additional pharmacists (VolumeDemoSeeder)
  */
 class DemoDataSeeder extends Seeder
 {
@@ -45,6 +46,7 @@ class DemoDataSeeder extends Seeder
         $this->seedPrescriptionsAndBills();
         $this->seedAgeVerifications();
         $this->seedAlerts();
+        $this->call(VolumeDemoSeeder::class);
         $this->call(AnomalyDemoSeeder::class);
     }
 

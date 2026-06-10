@@ -32,6 +32,8 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
     Route::get('prescriptions/pending-review', [PrescriptionController::class, 'pendingReview']);
     Route::post('prescriptions/{id}/submit', [PrescriptionController::class, 'submit']);
+    Route::patch('prescriptions/{id}/items', [PrescriptionController::class, 'updateItems']);
+    Route::post('prescriptions/{id}/revert-to-draft', [PrescriptionController::class, 'revertToDraft']);
     Route::post('prescriptions/{id}/approve', [PrescriptionController::class, 'approve'])
         ->middleware('role.manager_or_admin');
     Route::post('prescriptions/{id}/reject', [PrescriptionController::class, 'reject'])

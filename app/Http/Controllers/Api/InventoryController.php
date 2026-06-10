@@ -62,6 +62,10 @@ class InventoryController extends Controller
             'expiry_date' => ['required', 'date'],
         ]);
 
+        if (empty($validated['supplier_id'])) {
+            $validated['supplier_id'] = Inventory::defaultSupplierIdForPackage((int) $validated['package_id']);
+        }
+
         $inventory = Inventory::query()->create($validated);
         $inventory->load(['package.variant.medicine', 'supplier']);
         $nonExpiredTotal = $this->inventoryStockAllocator->sumNonExpiredForPackage((int) $inventory->package_id);
@@ -215,8 +219,10 @@ class InventoryController extends Controller
         $today ??= Carbon::today();
         $exp = $inv->expiry_date;
 
-        $inv->loadMissing('package.variant.medicine');
+        $inv->loadMissing('package.variant.medicine', 'supplier');
         $med = $inv->package?->variant?->medicine;
+        $pkg = $inv->package;
+        $supplier = $inv->resolvedSupplier();
 
         $packageNonExpiredTotal = $packageNonExpiredTotalOverride;
         if ($packageNonExpiredTotal === null && array_key_exists('package_non_expired_total', $inv->getAttributes())) {
@@ -226,12 +232,10 @@ class InventoryController extends Controller
             $packageNonExpiredTotal = (int) $inv->quantity;
         }
 
-        $pkg = $inv->package;
-
         return [
             'id' => $inv->id,
             'package_id' => $inv->package_id,
-            'supplier_id' => $inv->supplier_id,
+            'supplier_id' => $inv->supplier_id ?? $supplier?->id,
             'medicine_id' => $med?->id,
             'medicine_name' => $med?->name,
             'variant_display' => $pkg?->variant?->display_name,
@@ -240,6 +244,7 @@ class InventoryController extends Controller
             'package_size' => $pkg?->package_size,
             'package_unit' => $pkg?->package_unit,
             'unit_price' => $pkg?->unit_price !== null ? (float) $pkg->unit_price : null,
+            'supplier_name' => $supplier?->name,
             'requires_age_check' => (bool) ($med?->requires_age_check ?? false),
             'min_age' => $med?->min_age !== null ? (int) $med->min_age : null,
             'quantity' => $inv->quantity,

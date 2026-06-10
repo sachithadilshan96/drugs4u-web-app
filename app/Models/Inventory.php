@@ -62,4 +62,26 @@ class Inventory extends Model
     {
         return $query->where('quantity', '<', 10);
     }
+
+    public static function defaultSupplierIdForPackage(int $packageId): ?int
+    {
+        $package = MedicinePackage::query()
+            ->with('variant')
+            ->find($packageId);
+
+        if ($package === null) {
+            return null;
+        }
+
+        return $package->supplier_id ?? $package->variant?->supplier_id;
+    }
+
+    public function resolvedSupplier(): ?Supplier
+    {
+        $this->loadMissing('supplier', 'package.supplier', 'package.variant.supplier');
+
+        return $this->supplier
+            ?? $this->package?->supplier
+            ?? $this->package?->variant?->supplier;
+    }
 }

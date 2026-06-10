@@ -371,11 +371,7 @@ class PrescriptionInventoryApiTest extends TestCase
         $this->postJson('/api/logout')->assertOk();
         Auth::forgetGuards();
         $this->loginAs($pharmacist);
-        $this->postJson("/api/prescriptions/{$rxId}/dispatch", [
-            'items' => [
-                ['id' => $itemId, 'quantity_dispensed' => 3],
-            ],
-        ])->assertOk()->assertJsonPath('data.status', 'dispatched');
+        $this->postJson("/api/prescriptions/{$rxId}/dispatch")->assertOk()->assertJsonPath('data.status', 'dispatched');
 
         $inv->refresh();
         $this->assertSame(17, (int) $inv->quantity);
@@ -475,5 +471,90 @@ class PrescriptionInventoryApiTest extends TestCase
         $laterExpiry->refresh();
         $this->assertSame(0, (int) $earlierExpiry->quantity);
         $this->assertSame(8, (int) $laterExpiry->quantity);
+    }
+
+    public function test_inventory_store_defaults_supplier_from_package(): void
+    {
+        $user = User::factory()->create([
+            'username' => 'pharm_sup',
+            'password' => Hash::make('password'),
+            'role' => 'pharmacist',
+        ]);
+        $this->loginAs($user);
+
+        $fix = PharmaFixtures::medicineWithPackage([
+            'name' => 'Auto Supplier Med',
+            'requires_age_check' => false,
+            'min_age' => null,
+            'age_restriction_label' => null,
+            'age_restriction_notes' => null,
+        ]);
+
+        $res = $this->postJson('/api/inventory', [
+            'package_id' => $fix['package']->id,
+            'quantity' => 10,
+            'expiry_date' => now()->addYear()->toDateString(),
+        ])->assertCreated();
+
+        $this->assertSame($fix['variant']->supplier_id, $res->json('data.supplier_id'));
+        $this->assertNotNull($res->json('data.supplier_name'));
+        $this->assertDatabaseHas('inventory', [
+            'package_id' => $fix['package']->id,
+            'supplier_id' => $fix['variant']->supplier_id,
+            'quantity' => 10,
+        ]);
+    }
+
+    public function test_approved_prescription_items_read_only_until_reverted_to_draft(): void
+    {
+        $pharmacist = User::factory()->create([
+            'username' => 'pharm_lock',
+            'password' => Hash::make('password'),
+            'role' => 'pharmacist',
+        ]);
+        $this->loginAs($pharmacist);
+
+        $fix = PharmaFixtures::medicineWithPackage([
+            'name' => 'Lock Med',
+            'requires_age_check' => false,
+            'min_age' => null,
+            'age_restriction_label' => null,
+            'age_restriction_notes' => null,
+        ]);
+        PharmaFixtures::inventoryForPackage($fix['package'], ['quantity' => 50]);
+        $customer = Customer::factory()->create();
+
+        $create = $this->postJson('/api/prescriptions', [
+            'customer_id' => $customer->id,
+            'prescription_type' => 'nhs',
+            'items' => [
+                ['package_id' => $fix['package']->id, 'quantity' => 2],
+            ],
+        ])->assertCreated();
+
+        $rxId = (int) $create->json('data.id');
+        $itemId = (int) $create->json('data.items.0.id');
+
+        $this->postJson("/api/prescriptions/{$rxId}/submit")->assertOk()->assertJsonPath('data.status', 'approved');
+
+        $this->patchJson("/api/prescriptions/{$rxId}/items", [
+            'items' => [['id' => $itemId, 'quantity' => 5]],
+        ])->assertStatus(422);
+
+        $this->postJson("/api/prescriptions/{$rxId}/dispatch", [
+            'items' => [['id' => $itemId, 'quantity_dispensed' => 5]],
+        ])->assertStatus(422);
+
+        $this->postJson("/api/prescriptions/{$rxId}/revert-to-draft")
+            ->assertOk()
+            ->assertJsonPath('data.status', 'draft');
+
+        $this->patchJson("/api/prescriptions/{$rxId}/items", [
+            'items' => [['id' => $itemId, 'quantity' => 4]],
+        ])->assertOk()
+            ->assertJsonPath('data.items.0.quantity_dispensed', 4);
+
+        $this->postJson("/api/prescriptions/{$rxId}/submit")->assertOk()->assertJsonPath('data.status', 'approved');
+        $this->postJson("/api/prescriptions/{$rxId}/dispatch")->assertOk()->assertJsonPath('data.status', 'dispatched');
     }
 }

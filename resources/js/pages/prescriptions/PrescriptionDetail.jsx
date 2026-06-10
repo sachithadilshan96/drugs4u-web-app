@@ -29,6 +29,9 @@ export default function PrescriptionDetail() {
     const [billData, setBillData] = useState(null);
     const [rejectReason, setRejectReason] = useState('');
     const [dispatchItems, setDispatchItems] = useState([]);
+    const [savingItems, setSavingItems] = useState(false);
+
+    const canEditItems = rx?.status === 'draft';
 
     useDocumentTitle(rx ? `Prescription #${rx.id}` : 'Prescription');
 
@@ -49,7 +52,10 @@ export default function PrescriptionDetail() {
             } else {
                 setBillData(null);
             }
-            setDispatchItems((p.items ?? []).map((it) => ({ id: it.id, quantity_dispensed: it.quantity_dispensed || it.quantity || 1 })));
+            setDispatchItems((p.items ?? []).map((it) => ({
+                id: it.id,
+                quantity: it.quantity_dispensed || it.quantity || 1,
+            })));
         } catch (e) {
             toast.error(e.response?.data?.message ?? 'Could not load prescription.');
             setRx(null);
@@ -62,8 +68,28 @@ export default function PrescriptionDetail() {
         void load();
     }, [id]);
 
+    const buildItemsPayload = () =>
+        dispatchItems.map((row) => ({
+            id: row.id,
+            quantity: Number(row.quantity) || 1,
+        }));
+
+    const onSaveItems = async () => {
+        setSavingItems(true);
+        try {
+            await prescriptionsApi.updatePrescriptionItems(rx.id, buildItemsPayload());
+            toast.success('Items saved.');
+            await load();
+        } catch (e) {
+            toast.error(e.response?.data?.message ?? 'Could not save items.');
+        } finally {
+            setSavingItems(false);
+        }
+    };
+
     const onSubmit = async () => {
         try {
+            await prescriptionsApi.updatePrescriptionItems(rx.id, buildItemsPayload());
             await prescriptionsApi.submitPrescription(rx.id);
             toast.success('Prescription submitted.');
             await load();
@@ -92,11 +118,20 @@ export default function PrescriptionDetail() {
     };
     const onDispatch = async () => {
         try {
-            await prescriptionsApi.dispatchPrescription(rx.id, dispatchItems);
+            await prescriptionsApi.dispatchPrescription(rx.id);
             toast.success('Prescription dispatched.');
             await load();
         } catch (e) {
             toast.error(e.response?.data?.message ?? 'Could not dispatch.');
+        }
+    };
+    const onRevertToDraft = async () => {
+        try {
+            await prescriptionsApi.revertPrescriptionToDraft(rx.id);
+            toast.success('Prescription returned to draft — you can edit items and submit again.');
+            await load();
+        } catch (e) {
+            toast.error(e.response?.data?.message ?? 'Could not return to draft.');
         }
     };
     const onCancel = async () => {
@@ -152,7 +187,18 @@ export default function PrescriptionDetail() {
             </Card>
 
             <Card>
-                <CardHeader><CardTitle>Items</CardTitle></CardHeader>
+                <CardHeader>
+                    <CardTitle>Items</CardTitle>
+                    {canEditItems ? (
+                        <CardDescription>
+                            Edit quantities while in draft. To change medicines, cancel and create a new prescription.
+                        </CardDescription>
+                    ) : rx.status === 'approved' ? (
+                        <CardDescription>
+                            Items are locked after approval. Return to draft to edit, then submit for approval again.
+                        </CardDescription>
+                    ) : null}
+                </CardHeader>
                 <CardContent className="space-y-2">
                     {(rx.items ?? []).map((item) => (
                         <div key={item.id} className="flex items-center justify-between gap-2 rounded-md border p-2">
@@ -160,16 +206,22 @@ export default function PrescriptionDetail() {
                                 <div className="font-medium">{item.medicine_name}</div>
                                 <div className="text-xs text-muted-foreground">{item.package_description}</div>
                             </div>
-                            {rx.status === 'draft' || rx.status === 'approved' ? (
+                            {canEditItems ? (
                                 <Input
                                     type="number"
                                     min={1}
                                     className="w-24"
-                                    value={dispatchItems.find((x) => x.id === item.id)?.quantity_dispensed ?? item.quantity}
-                                    onChange={(e) => setDispatchItems((prev) => prev.map((x) => x.id === item.id ? { ...x, quantity_dispensed: Number(e.target.value) || 1 } : x))}
+                                    value={dispatchItems.find((x) => x.id === item.id)?.quantity ?? item.quantity}
+                                    onChange={(e) =>
+                                        setDispatchItems((prev) =>
+                                            prev.map((x) =>
+                                                x.id === item.id ? { ...x, quantity: Number(e.target.value) || 1 } : x,
+                                            ),
+                                        )
+                                    }
                                 />
                             ) : (
-                                <span className="text-sm">Qty {item.quantity_dispensed ?? item.quantity}</span>
+                                <span className="text-sm tabular-nums">Qty {item.quantity_dispensed ?? item.quantity}</span>
                             )}
                         </div>
                     ))}
@@ -177,9 +229,16 @@ export default function PrescriptionDetail() {
             </Card>
 
             {rx.status === 'draft' ? (
-                <div className="flex gap-2">
-                    <Button className="bg-emerald-600 text-white hover:bg-emerald-500" onClick={onSubmit}>Submit Prescription</Button>
-                    <Button variant="outline" className="text-destructive" onClick={onCancel}>Cancel</Button>
+                <div className="flex flex-wrap gap-2">
+                    <Button variant="secondary" onClick={() => void onSaveItems()} disabled={savingItems}>
+                        Save changes
+                    </Button>
+                    <Button className="bg-emerald-600 text-white hover:bg-emerald-500" onClick={() => void onSubmit()}>
+                        Submit prescription
+                    </Button>
+                    <Button variant="outline" className="text-destructive" onClick={() => void onCancel()}>
+                        Cancel
+                    </Button>
                 </div>
             ) : null}
 
@@ -200,9 +259,16 @@ export default function PrescriptionDetail() {
             ) : null}
 
             {rx.status === 'approved' ? (
-                <div className="flex gap-2">
-                    <Button className="bg-emerald-600 text-white hover:bg-emerald-500" onClick={onDispatch}>Confirm & Dispatch</Button>
-                    <Button variant="outline" className="text-destructive" onClick={onCancel}>Cancel</Button>
+                <div className="flex flex-wrap gap-2">
+                    <Button className="bg-emerald-600 text-white hover:bg-emerald-500" onClick={() => void onDispatch()}>
+                        Confirm &amp; dispatch
+                    </Button>
+                    <Button variant="outline" onClick={() => void onRevertToDraft()}>
+                        Return to draft for editing
+                    </Button>
+                    <Button variant="outline" className="text-destructive" onClick={() => void onCancel()}>
+                        Cancel
+                    </Button>
                 </div>
             ) : null}
 
