@@ -247,15 +247,20 @@ class ReportController extends Controller
             }
         }
 
-        $inv->loadMissing('package.variant.medicine');
+        $inv->loadMissing('package.variant.medicine', 'supplier');
         $med = $inv->package?->variant?->medicine;
+        $pkg = $inv->package;
 
         return [
             'id' => $inv->id,
+            'batch_id' => $inv->id,
             'package_id' => $inv->package_id,
             'medicine_id' => $med?->id,
             'medicine_name' => $med?->name,
-            'package_description' => $inv->package?->full_description,
+            'variant_display' => $pkg?->variant?->display_name,
+            'package_description' => $pkg?->full_description,
+            'package_detail' => $pkg?->package_description,
+            'supplier_name' => $inv->supplier?->name,
             'quantity' => $qty,
             'expiry_date' => $exp?->toDateString(),
             'status' => $status,
@@ -285,12 +290,14 @@ class ReportController extends Controller
                 $summary['expiring_soon_count'],
             ]);
             fputcsv($out, []);
-            fputcsv($out, ['id', 'medicine_id', 'medicine_name', 'quantity', 'expiry_date', 'status']);
+            fputcsv($out, ['batch_id', 'medicine_id', 'medicine_name', 'package', 'supplier', 'quantity', 'expiry_date', 'status']);
             foreach ($rows as $r) {
                 fputcsv($out, [
-                    $r['id'],
+                    $r['batch_id'] ?? $r['id'],
                     $r['medicine_id'],
                     $r['medicine_name'],
+                    $r['package_description'] ?? $r['package_detail'] ?? '',
+                    $r['supplier_name'] ?? '',
                     $r['quantity'],
                     $r['expiry_date'],
                     $r['status'],

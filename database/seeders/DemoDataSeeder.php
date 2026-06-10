@@ -45,6 +45,7 @@ class DemoDataSeeder extends Seeder
         $this->seedPrescriptionsAndBills();
         $this->seedAgeVerifications();
         $this->seedAlerts();
+        $this->call(AnomalyDemoSeeder::class);
     }
 
     private function seedStaff(): void

@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { BarChart3, Package, Users } from 'lucide-react';
+import { BarChart3, Package, ShieldAlert, Users } from 'lucide-react';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
@@ -21,6 +21,12 @@ const cards = [
         title: 'Stock report',
         description: 'US15 — Full inventory, status summary, and CSV export.',
         icon: Package,
+    },
+    {
+        to: '/reports/anomaly',
+        title: 'Anomaly detection',
+        description: 'Controlled-medicine abuse patterns: frequency spikes, bypasses, and cluster fraud.',
+        icon: ShieldAlert,
     },
 ];
 

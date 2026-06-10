@@ -29,6 +29,7 @@ import Reports from '@/pages/reports/Reports';
 import PrescriptionDateReport from '@/pages/reports/PrescriptionDateReport';
 import PrescriptionCustomerReport from '@/pages/reports/PrescriptionCustomerReport';
 import StockReport from '@/pages/reports/StockReport';
+import AnomalyReport from '@/pages/reports/AnomalyReport';
 import AlertsLog from '@/pages/alerts/AlertsLog';
 import UserManagement from '@/pages/admin/UserManagement';
 import NotFound from '@/pages/errors/NotFound';
@@ -155,6 +156,7 @@ function AppRoutes() {
                         <Route path="/reports/prescriptions-by-date" element={<PrescriptionDateReport />} />
                         <Route path="/reports/prescriptions-by-customer" element={<PrescriptionCustomerReport />} />
                         <Route path="/reports/stock" element={<StockReport />} />
+                        <Route path="/reports/anomaly" element={<AnomalyReport />} />
                         <Route path="/reports" element={<Reports />} />
                         <Route path="/alerts" element={<AlertsLog />} />
                         <Route path="/admin/users" element={<UserManagement />} />

@@ -7,6 +7,7 @@ import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
     Table,
     TableBody,
@@ -48,6 +49,10 @@ export default function StockReport() {
             setLoading(false);
         }
     }, []);
+
+    useEffect(() => {
+        void load();
+    }, [load]);
 
     const onExport = useCallback(async () => {
         setExporting(true);
@@ -139,13 +144,18 @@ export default function StockReport() {
                 <Card>
                     <CardHeader>
                         <CardTitle className="text-lg">Inventory</CardTitle>
-                        <CardDescription>All batches; status is evaluated per row.</CardDescription>
+                        <CardDescription>
+                            Each row is a separate stock batch (unique batch ID). The same medicine can appear on multiple lines when
+                            stock was received at different times or with different expiry dates.
+                        </CardDescription>
                     </CardHeader>
                     <CardContent className="overflow-x-auto">
                         <Table>
                             <TableHeader>
                                 <TableRow>
+                                    <TableHead>Batch</TableHead>
                                     <TableHead>Medicine</TableHead>
+                                    <TableHead>Package</TableHead>
                                     <TableHead>Qty</TableHead>
                                     <TableHead>Expiry</TableHead>
                                     <TableHead>Status</TableHead>
@@ -154,7 +164,21 @@ export default function StockReport() {
                             <TableBody>
                                 {data.rows.map((row) => (
                                     <TableRow key={row.id}>
-                                        <TableCell className="font-medium">{row.medicine_name ?? '—'}</TableCell>
+                                        <TableCell className="whitespace-nowrap font-mono text-xs text-muted-foreground">
+                                            #{row.batch_id ?? row.id}
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="font-medium">{row.medicine_name ?? '—'}</div>
+                                            {row.variant_display ? (
+                                                <div className="text-xs text-muted-foreground">{row.variant_display}</div>
+                                            ) : null}
+                                        </TableCell>
+                                        <TableCell className="max-w-[12rem] text-sm text-muted-foreground">
+                                            {row.package_description ?? row.package_detail ?? '—'}
+                                            {row.supplier_name ? (
+                                                <div className="text-xs">Supplier: {row.supplier_name}</div>
+                                            ) : null}
+                                        </TableCell>
                                         <TableCell>{row.quantity}</TableCell>
                                         <TableCell>{row.expiry_date ?? '—'}</TableCell>
                                         <TableCell>{statusBadge(row.status)}</TableCell>

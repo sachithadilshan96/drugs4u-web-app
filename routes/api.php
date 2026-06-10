@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AgeVerificationController;
 use App\Http\Controllers\Api\AlertController;
+use App\Http\Controllers\Api\AnomalyReportController;
 use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\CustomerHealthController;
 use App\Http\Controllers\Api\DashboardController;
@@ -81,6 +82,14 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('reports/prescriptions-by-date', [ReportController::class, 'prescriptionsByDate']);
         Route::get('reports/prescriptions-by-customer', [ReportController::class, 'prescriptionsByCustomer']);
         Route::get('reports/stock', [ReportController::class, 'stockReport']);
+
+        Route::prefix('reports/anomaly')->group(function (): void {
+            Route::get('/', [AnomalyReportController::class, 'index']);
+            Route::get('/export', [AnomalyReportController::class, 'export']);
+            Route::get('/thresholds', [AnomalyReportController::class, 'thresholds']);
+            Route::put('/thresholds', [AnomalyReportController::class, 'thresholds'])
+                ->middleware('role:admin');
+        });
     });
 
     Route::middleware('role.admin')->group(function (): void {
