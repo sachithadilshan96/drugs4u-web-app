@@ -98,7 +98,7 @@ function TableSkeleton() {
 }
 
 export default function AlertsLog() {
-    useDocumentTitle('Login logs');
+    useDocumentTitle('Login history');
 
     const [searchInput, setSearchInput] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -152,7 +152,7 @@ export default function AlertsLog() {
                     <LogIn className="size-5" aria-hidden />
                     <span className="text-sm font-medium">Admin audit</span>
                 </div>
-                <h1 className="font-heading text-2xl font-semibold tracking-tight">Login logs</h1>
+                <h1 className="font-heading text-2xl font-semibold tracking-tight">Login history</h1>
                 <p className="mt-1 text-sm text-muted-foreground">
                     Staff sign-in history by session: who logged in, from where, and when they signed out.
                 </p>
@@ -171,7 +171,7 @@ export default function AlertsLog() {
                         placeholder="Search by username or name…"
                         value={searchInput}
                         onChange={(e) => setSearchInput(e.target.value)}
-                        aria-label="Search login logs"
+                        aria-label="Search login history"
                     />
                 </CardHeader>
                 <CardContent>

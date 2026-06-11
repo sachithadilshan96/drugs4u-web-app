@@ -258,7 +258,7 @@ export default function UserGuide() {
                                         <td className="px-3 py-2">Yes</td>
                                     </tr>
                                     <tr>
-                                        <td className="px-3 py-2">Login logs</td>
+                                        <td className="px-3 py-2">Login history</td>
                                         <td className="px-3 py-2">—</td>
                                         <td className="px-3 py-2">—</td>
                                         <td className="px-3 py-2">Yes</td>
@@ -537,9 +537,9 @@ export default function UserGuide() {
                             days) → Run report. Review critical and high severity tabs. Export CSV for audit records
                             if required.
                         </Example>
-                        <h3 className="font-medium text-foreground">Login logs (admin only)</h3>
+                        <h3 className="font-medium text-foreground">Login history (admin only)</h3>
                         <p>
-                            Under <Link className="text-teal-600 underline underline-offset-2 hover:opacity-80 dark:text-teal-400" to="/alerts">Login logs</Link> in
+                            Under <Link className="text-teal-600 underline underline-offset-2 hover:opacity-80 dark:text-teal-400" to="/alerts">Login history</Link> in
                             Reporting, administrators can review each staff sign-in: username, IP address, browser,
                             sign-in and sign-out times, session duration, and whether the session is still active.
                         </p>

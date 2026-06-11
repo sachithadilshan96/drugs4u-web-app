@@ -71,7 +71,7 @@ const NAV_SECTIONS = [
         label: 'Reporting',
         items: [
             { to: '/reports', label: 'Reports', roles: ['manager', 'admin'] },
-            { to: '/alerts', label: 'Login logs', roles: ['admin'] },
+            { to: '/alerts', label: 'Login history', roles: ['admin'] },
         ],
     },
 ];

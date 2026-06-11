@@ -91,7 +91,7 @@ const TITLE_RULES = [
     { pattern: /^\/reports\/prescriptions-by-customer\/?$/, title: 'Prescriptions by customer' },
     { pattern: /^\/reports\/stock\/?$/, title: 'Stock report' },
     { pattern: /^\/reports\/?$/, title: 'Reports' },
-    { pattern: /^\/alerts\/?$/, title: 'Login logs' },
+    { pattern: /^\/alerts\/?$/, title: 'Login history' },
     { pattern: /^\/admin\/users\/?$/, title: 'User Management' },
 ];
 
