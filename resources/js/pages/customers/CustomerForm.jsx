@@ -179,6 +179,7 @@ export default function CustomerForm() {
                 </Link>
             </Button>
 
+            <form onSubmit={onSubmit} className="space-y-6">
             <Card>
                 <CardHeader>
                     <CardTitle className="font-heading text-xl">{isEdit ? 'Edit customer' : 'New customer'}</CardTitle>
@@ -186,8 +187,7 @@ export default function CustomerForm() {
                         {isEdit ? 'Update core registration details.' : 'Register a customer for in-store prescriptions.'}
                     </CardDescription>
                 </CardHeader>
-                <CardContent>
-                    <form onSubmit={onSubmit} className="space-y-4">
+                <CardContent className="space-y-4">
                         <div className="space-y-2">
                             <Label htmlFor="full_name">Full name</Label>
                             <Input
@@ -244,16 +244,6 @@ export default function CustomerForm() {
                             />
                             {errors.email ? <p className="text-sm text-destructive">{errors.email}</p> : null}
                         </div>
-                        <div className="flex gap-2 pt-2">
-                            <Button type="submit" disabled={saving} className="gap-2 bg-teal-600 text-white hover:bg-teal-500">
-                                {saving ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
-                                {isEdit ? 'Save changes' : 'Create customer'}
-                            </Button>
-                            <Button type="button" variant="outline" asChild>
-                                <Link to="/customers">Cancel</Link>
-                            </Button>
-                        </div>
-                    </form>
                 </CardContent>
             </Card>
 
@@ -309,6 +299,17 @@ export default function CustomerForm() {
                     </div>
                 </CardContent>
             </Card>
+
+            <div className="flex gap-2">
+                <Button type="submit" disabled={saving} className="gap-2 bg-teal-600 text-white hover:bg-teal-500">
+                    {saving ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
+                    {isEdit ? 'Save changes' : 'Create customer'}
+                </Button>
+                <Button type="button" variant="outline" asChild>
+                    <Link to="/customers">Cancel</Link>
+                </Button>
+            </div>
+            </form>
         </div>
     );
 }
