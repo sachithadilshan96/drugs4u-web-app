@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 
 class UserController extends Controller
@@ -46,6 +47,21 @@ class UserController extends Controller
             $user->only(['id', 'name', 'username', 'role', 'created_at']),
             201
         );
+    }
+
+    /**
+     * Reset another staff user's password (admin only).
+     */
+    public function updatePassword(Request $request, User $user): JsonResponse
+    {
+        $validated = $request->validate([
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
+        ]);
+
+        $user->password = $validated['password'];
+        $user->save();
+
+        return response()->json(['message' => 'Password reset successfully.']);
     }
 
     /**

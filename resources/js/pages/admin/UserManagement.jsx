@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Trash2 } from 'lucide-react';
+import { KeyRound, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import * as usersApi from '@/api/users';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useAuthStore } from '@/store/authStore';
+import { passwordStrength } from '@/lib/passwordStrength';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -34,6 +35,14 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 
 function roleBadgeClass(role) {
@@ -45,35 +54,6 @@ function roleBadgeClass(role) {
         default:
             return 'border-teal-400/50 bg-teal-950/40 text-teal-100';
     }
-}
-
-function passwordStrength(password) {
-    if (!password) {
-        return { label: '', className: 'text-muted-foreground' };
-    }
-    let score = 0;
-    if (password.length >= 8) {
-        score++;
-    }
-    if (password.length >= 12) {
-        score++;
-    }
-    if (/[a-z]/.test(password) && /[A-Z]/.test(password)) {
-        score++;
-    }
-    if (/\d/.test(password)) {
-        score++;
-    }
-    if (/[^A-Za-z0-9]/.test(password)) {
-        score++;
-    }
-    if (score <= 2) {
-        return { label: 'Weak', className: 'font-medium text-red-600 dark:text-red-400' };
-    }
-    if (score <= 4) {
-        return { label: 'Medium', className: 'font-medium text-amber-600 dark:text-amber-400' };
-    }
-    return { label: 'Strong', className: 'font-medium text-green-600 dark:text-green-400' };
 }
 
 function formatCreatedAt(iso) {
@@ -115,6 +95,11 @@ export default function UserManagement() {
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [deleteTarget, setDeleteTarget] = useState(null);
+    const [resetTarget, setResetTarget] = useState(null);
+    const [resetPassword, setResetPassword] = useState('');
+    const [resetPasswordConfirmation, setResetPasswordConfirmation] = useState('');
+    const [resetFieldErrors, setResetFieldErrors] = useState({});
+    const [resetSubmitting, setResetSubmitting] = useState(false);
 
     const [name, setName] = useState('');
     const [username, setUsername] = useState('');
@@ -125,6 +110,7 @@ export default function UserManagement() {
     const [fieldErrors, setFieldErrors] = useState({});
 
     const strength = useMemo(() => passwordStrength(password), [password]);
+    const resetStrength = useMemo(() => passwordStrength(resetPassword), [resetPassword]);
 
     const loadUsers = useCallback(async () => {
         setLoading(true);
@@ -197,6 +183,54 @@ export default function UserManagement() {
         }
     }
 
+    function openResetDialog(user) {
+        setResetTarget(user);
+        setResetPassword('');
+        setResetPasswordConfirmation('');
+        setResetFieldErrors({});
+    }
+
+    function closeResetDialog() {
+        setResetTarget(null);
+        setResetPassword('');
+        setResetPasswordConfirmation('');
+        setResetFieldErrors({});
+    }
+
+    async function confirmResetPassword(e) {
+        e.preventDefault();
+        if (!resetTarget) {
+            return;
+        }
+        setResetFieldErrors({});
+        setResetSubmitting(true);
+        try {
+            await usersApi.resetUserPassword(resetTarget.id, {
+                password: resetPassword,
+                password_confirmation: resetPasswordConfirmation,
+            });
+            toast.success(`Password reset for ${resetTarget.username}.`);
+            closeResetDialog();
+        } catch (err) {
+            const errs = err.response?.data?.errors;
+            if (errs && typeof errs === 'object') {
+                const next = {};
+                for (const [key, val] of Object.entries(errs)) {
+                    next[key] = Array.isArray(val) ? val[0] : String(val);
+                }
+                setResetFieldErrors(next);
+            }
+            const msg = err.response?.data?.message;
+            if (typeof msg === 'string' && !errs) {
+                toast.error(msg);
+            } else if (!errs) {
+                toast.error('Could not reset password.');
+            }
+        } finally {
+            setResetSubmitting(false);
+        }
+    }
+
     return (
         <div className="mx-auto flex max-w-6xl flex-col gap-8 lg:flex-row lg:items-start">
             <section className="min-w-0 flex-1 space-y-4">
@@ -216,7 +250,7 @@ export default function UserManagement() {
                                 <TableHead>Username</TableHead>
                                 <TableHead>Role</TableHead>
                                 <TableHead>Created</TableHead>
-                                <TableHead className="w-[72px] text-right">Actions</TableHead>
+                                <TableHead className="w-[100px] text-right">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -233,17 +267,29 @@ export default function UserManagement() {
                                         </TableCell>
                                         <TableCell className="text-muted-foreground">{formatCreatedAt(u.created_at)}</TableCell>
                                         <TableCell className="text-right">
-                                            <Button
-                                                type="button"
-                                                variant="ghost"
-                                                size="icon-sm"
-                                                className={cn('text-muted-foreground', isSelf && 'pointer-events-none opacity-40')}
-                                                disabled={isSelf}
-                                                aria-label={isSelf ? 'Cannot delete your own account' : `Delete ${u.name}`}
-                                                onClick={() => !isSelf && setDeleteTarget(u)}
-                                            >
-                                                <Trash2 className="size-4" />
-                                            </Button>
+                                            <div className="flex justify-end gap-1">
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="icon-sm"
+                                                    className="text-muted-foreground"
+                                                    aria-label={`Reset password for ${u.name}`}
+                                                    onClick={() => openResetDialog(u)}
+                                                >
+                                                    <KeyRound className="size-4" />
+                                                </Button>
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="icon-sm"
+                                                    className={cn('text-muted-foreground', isSelf && 'pointer-events-none opacity-40')}
+                                                    disabled={isSelf}
+                                                    aria-label={isSelf ? 'Cannot delete your own account' : `Delete ${u.name}`}
+                                                    onClick={() => !isSelf && setDeleteTarget(u)}
+                                                >
+                                                    <Trash2 className="size-4" />
+                                                </Button>
+                                            </div>
                                         </TableCell>
                                     </TableRow>
                                 );
@@ -354,6 +400,63 @@ export default function UserManagement() {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+
+            <Dialog open={!!resetTarget} onOpenChange={(open) => !open && closeResetDialog()}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Reset password</DialogTitle>
+                        <DialogDescription>
+                            {resetTarget
+                                ? `Set a new password for ${resetTarget.name} (${resetTarget.username}). They will need this password on their next sign-in.`
+                                : ''}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <form onSubmit={confirmResetPassword} className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="reset-password">New password</Label>
+                            <Input
+                                id="reset-password"
+                                type="password"
+                                value={resetPassword}
+                                onChange={(e) => setResetPassword(e.target.value)}
+                                required
+                                minLength={8}
+                                autoComplete="new-password"
+                                aria-invalid={!!resetFieldErrors.password}
+                            />
+                            {resetPassword ? (
+                                <p className={cn('text-xs', resetStrength.className)}>Strength: {resetStrength.label}</p>
+                            ) : null}
+                            {resetFieldErrors.password ? (
+                                <p className="text-xs text-destructive">{resetFieldErrors.password}</p>
+                            ) : null}
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="reset-password-2">Confirm new password</Label>
+                            <Input
+                                id="reset-password-2"
+                                type="password"
+                                value={resetPasswordConfirmation}
+                                onChange={(e) => setResetPasswordConfirmation(e.target.value)}
+                                required
+                                autoComplete="new-password"
+                                aria-invalid={!!resetFieldErrors.password_confirmation}
+                            />
+                            {resetFieldErrors.password_confirmation ? (
+                                <p className="text-xs text-destructive">{resetFieldErrors.password_confirmation}</p>
+                            ) : null}
+                        </div>
+                        <DialogFooter>
+                            <Button type="button" variant="outline" onClick={closeResetDialog}>
+                                Cancel
+                            </Button>
+                            <Button type="submit" disabled={resetSubmitting}>
+                                {resetSubmitting ? 'Saving…' : 'Reset password'}
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

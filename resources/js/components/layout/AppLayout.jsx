@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
-import { ChevronDown, ChevronRight, LogOut, Menu, Pill } from 'lucide-react';
+import { ChevronDown, ChevronRight, KeyRound, LogOut, Menu, Pill } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { pageTitleForPath } from '@/lib/routeAccess';
 import * as prescriptionsApi from '@/api/prescriptions';
@@ -71,7 +71,7 @@ const NAV_SECTIONS = [
         label: 'Reporting',
         items: [
             { to: '/reports', label: 'Reports', roles: ['manager', 'admin'] },
-            { to: '/alerts', label: 'Alerts log', roles: ['admin'] },
+            { to: '/alerts', label: 'Login logs', roles: ['admin'] },
         ],
     },
 ];
@@ -251,6 +251,18 @@ function SidebarFooter({ role, onLogout }) {
                     </Badge>
                 ) : null}
             </div>
+            <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mb-2 inline-flex w-full gap-2 border-slate-600 text-slate-100 hover:bg-slate-800 hover:text-white"
+                asChild
+            >
+                <Link to="/account/password">
+                    <KeyRound className="size-4" aria-hidden />
+                    Change password
+                </Link>
+            </Button>
             <Button
                 type="button"
                 variant="outline"

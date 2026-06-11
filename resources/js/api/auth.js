@@ -26,3 +26,10 @@ export function fetchUser() {
         validateStatus: (status) => status === 200 || status === 401,
     });
 }
+
+/**
+ * @param {{ current_password: string; password: string; password_confirmation: string }} data
+ */
+export function changePassword(data) {
+    return api.patch('/me/password', data);
+}

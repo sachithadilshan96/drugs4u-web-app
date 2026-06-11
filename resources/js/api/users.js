@@ -14,3 +14,11 @@ export function createUser(data) {
 export function deleteUser(id) {
     return api.delete(`/users/${id}`);
 }
+
+/**
+ * @param {number | string} id
+ * @param {{ password: string; password_confirmation: string }} data
+ */
+export function resetUserPassword(id, data) {
+    return api.patch(`/users/${id}/password`, data);
+}

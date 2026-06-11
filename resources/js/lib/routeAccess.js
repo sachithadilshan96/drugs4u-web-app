@@ -18,6 +18,7 @@ const PATH_PREFIX_ROLES = [
     { prefix: '/inventory', roles: ['pharmacist', 'manager', 'admin'] },
     { prefix: '/dashboard', roles: ['pharmacist', 'manager', 'admin'] },
     { prefix: '/guide', roles: ['pharmacist', 'manager', 'admin'] },
+    { prefix: '/account', roles: ['pharmacist', 'manager', 'admin'] },
 ];
 
 /**
@@ -69,6 +70,7 @@ export function requiredRoleForSoftRedirect(pathname) {
 const TITLE_RULES = [
     { pattern: /^\/dashboard\/?$/, title: 'Dashboard' },
     { pattern: /^\/guide\/?$/, title: 'User guide' },
+    { pattern: /^\/account\/password\/?$/, title: 'Change password' },
     { pattern: /^\/customers\/new\/?$/, title: 'New customer' },
     { pattern: /^\/customers\/[^/]+\/edit\/?$/, title: 'Edit customer' },
     { pattern: /^\/customers\/[^/]+\/?$/, title: 'Customer' },
@@ -89,7 +91,7 @@ const TITLE_RULES = [
     { pattern: /^\/reports\/prescriptions-by-customer\/?$/, title: 'Prescriptions by customer' },
     { pattern: /^\/reports\/stock\/?$/, title: 'Stock report' },
     { pattern: /^\/reports\/?$/, title: 'Reports' },
-    { pattern: /^\/alerts\/?$/, title: 'Alerts log' },
+    { pattern: /^\/alerts\/?$/, title: 'Login logs' },
     { pattern: /^\/admin\/users\/?$/, title: 'User Management' },
 ];
 

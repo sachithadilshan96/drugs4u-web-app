@@ -146,4 +146,57 @@ class AdminUsersApiTest extends TestCase
 
         $this->assertDatabaseMissing('users', ['id' => $other->id]);
     }
+
+    public function test_admin_can_reset_another_users_password(): void
+    {
+        $admin = User::factory()->create([
+            'username' => 'admin',
+            'password' => Hash::make('password'),
+            'role' => 'admin',
+        ]);
+        $other = User::factory()->create([
+            'username' => 'john',
+            'password' => Hash::make('password'),
+            'role' => 'pharmacist',
+        ]);
+
+        $this->loginAs($admin);
+        Auth::forgetGuards();
+
+        $this->patchJson("/api/users/{$other->id}/password", [
+            'password' => 'resetpass123',
+            'password_confirmation' => 'resetpass123',
+        ])
+            ->assertOk()
+            ->assertJsonPath('message', 'Password reset successfully.');
+
+        Auth::forgetGuards();
+
+        $this->postJson('/api/login', [
+            'username' => 'john',
+            'password' => 'resetpass123',
+        ])->assertOk();
+    }
+
+    public function test_non_admin_cannot_reset_user_password(): void
+    {
+        $pharmacist = User::factory()->create([
+            'username' => 'john',
+            'password' => Hash::make('password'),
+            'role' => 'pharmacist',
+        ]);
+        $other = User::factory()->create([
+            'username' => 'mike',
+            'password' => Hash::make('password'),
+            'role' => 'pharmacist',
+        ]);
+
+        $this->loginAs($pharmacist);
+        Auth::forgetGuards();
+
+        $this->patchJson("/api/users/{$other->id}/password", [
+            'password' => 'resetpass123',
+            'password_confirmation' => 'resetpass123',
+        ])->assertForbidden();
+    }
 }

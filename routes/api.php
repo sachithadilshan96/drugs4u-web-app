@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\CustomerHealthController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\BillController;
 use App\Http\Controllers\Api\InventoryController;
+use App\Http\Controllers\Api\LoginLogController;
 use App\Http\Controllers\Api\MedicineController;
 use App\Http\Controllers\Api\MedicinePackageController;
 use App\Http\Controllers\Api\MedicineVariantController;
@@ -24,6 +25,7 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
+    Route::patch('/me/password', [AuthController::class, 'updatePassword']);
 
     Route::get('customers/search/{query}', [CustomerController::class, 'search'])
         ->where('query', '[^/]*');
@@ -95,6 +97,8 @@ Route::middleware('auth:sanctum')->group(function (): void {
     });
 
     Route::middleware('role.admin')->group(function (): void {
+        Route::get('login-logs', [LoginLogController::class, 'index']);
+        Route::patch('users/{user}/password', [UserController::class, 'updatePassword']);
         Route::apiResource('users', UserController::class)->only(['index', 'store', 'destroy']);
     });
 });

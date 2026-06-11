@@ -93,4 +93,74 @@ class ApiAuthTest extends TestCase
 
         $this->getJson('/api/me')->assertStatus(401);
     }
+
+    public function test_authenticated_user_can_change_password(): void
+    {
+        $user = User::factory()->create([
+            'username' => 'john',
+            'password' => Hash::make('password'),
+            'role' => 'pharmacist',
+        ]);
+
+        $this->rememberSessionCookieFrom($this->get('/sanctum/csrf-cookie'));
+        $this->rememberSessionCookieFrom(
+            $this->postJson('/api/login', [
+                'username' => 'john',
+                'password' => 'password',
+            ])->assertOk()
+        );
+
+        Auth::forgetGuards();
+
+        $this->patchJson('/api/me/password', [
+            'current_password' => 'password',
+            'password' => 'newpassword123',
+            'password_confirmation' => 'newpassword123',
+        ])
+            ->assertOk()
+            ->assertJsonPath('message', 'Password updated successfully.');
+
+        Auth::forgetGuards();
+
+        $this->postJson('/api/login', [
+            'username' => 'john',
+            'password' => 'newpassword123',
+        ])->assertOk();
+    }
+
+    public function test_change_password_rejects_wrong_current_password(): void
+    {
+        $user = User::factory()->create([
+            'username' => 'john',
+            'password' => Hash::make('password'),
+            'role' => 'pharmacist',
+        ]);
+
+        $this->rememberSessionCookieFrom($this->get('/sanctum/csrf-cookie'));
+        $this->rememberSessionCookieFrom(
+            $this->postJson('/api/login', [
+                'username' => 'john',
+                'password' => 'password',
+            ])->assertOk()
+        );
+
+        Auth::forgetGuards();
+
+        $this->patchJson('/api/me/password', [
+            'current_password' => 'wrong',
+            'password' => 'newpassword123',
+            'password_confirmation' => 'newpassword123',
+        ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Current password is incorrect.');
+    }
+
+    public function test_guest_cannot_change_password(): void
+    {
+        $this->patchJson('/api/me/password', [
+            'current_password' => 'password',
+            'password' => 'newpassword123',
+            'password_confirmation' => 'newpassword123',
+        ])->assertStatus(401);
+    }
 }

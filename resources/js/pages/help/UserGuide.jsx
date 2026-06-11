@@ -176,6 +176,11 @@ export default function UserGuide() {
                             Use the <strong>Logout</strong> button at the bottom of the sidebar when you finish your
                             session, especially on shared terminals.
                         </FlowStep>
+                        <FlowStep step="4" title="Change your password">
+                            Use <strong>Change password</strong> in the sidebar footer (above Logout), or open{' '}
+                            <Link className="text-teal-600 underline underline-offset-2 hover:opacity-80 dark:text-teal-400" to="/account/password">Change password</Link>.
+                            Enter your current password, then your new password twice.
+                        </FlowStep>
                         <Example title="Demo accounts">
                             On demo environments, common logins include <code className="rounded bg-muted px-1">john</code> or{' '}
                             <code className="rounded bg-muted px-1">mike</code> (pharmacist),{' '}
@@ -236,6 +241,24 @@ export default function UserGuide() {
                                     </tr>
                                     <tr>
                                         <td className="px-3 py-2">User management</td>
+                                        <td className="px-3 py-2">—</td>
+                                        <td className="px-3 py-2">—</td>
+                                        <td className="px-3 py-2">Yes</td>
+                                    </tr>
+                                    <tr>
+                                        <td className="px-3 py-2">Change own password</td>
+                                        <td className="px-3 py-2">Yes</td>
+                                        <td className="px-3 py-2">Yes</td>
+                                        <td className="px-3 py-2">Yes</td>
+                                    </tr>
+                                    <tr>
+                                        <td className="px-3 py-2">Reset another user&apos;s password</td>
+                                        <td className="px-3 py-2">—</td>
+                                        <td className="px-3 py-2">—</td>
+                                        <td className="px-3 py-2">Yes</td>
+                                    </tr>
+                                    <tr>
+                                        <td className="px-3 py-2">Login logs</td>
                                         <td className="px-3 py-2">—</td>
                                         <td className="px-3 py-2">—</td>
                                         <td className="px-3 py-2">Yes</td>
@@ -514,6 +537,12 @@ export default function UserGuide() {
                             days) → Run report. Review critical and high severity tabs. Export CSV for audit records
                             if required.
                         </Example>
+                        <h3 className="font-medium text-foreground">Login logs (admin only)</h3>
+                        <p>
+                            Under <Link className="text-teal-600 underline underline-offset-2 hover:opacity-80 dark:text-teal-400" to="/alerts">Login logs</Link> in
+                            Reporting, administrators can review each staff sign-in: username, IP address, browser,
+                            sign-in and sign-out times, session duration, and whether the session is still active.
+                        </p>
                     </Section>
 
                     <Section id="tips" title="Tips & troubleshooting">
@@ -535,6 +564,11 @@ export default function UserGuide() {
                                 Inventory; dismissing the banner only hides it until the next check.
                             </li>
                             <li>
+                                <strong>Forgot your password?</strong> Ask an administrator to reset it from{' '}
+                                <Link className="text-teal-600 underline underline-offset-2 hover:opacity-80 dark:text-teal-400" to="/admin/users">User Management</Link>{' '}
+                                (key icon on the user row). There is no email self-service reset.
+                            </li>
+                            <li>
                                 <strong>Session expired?</strong> Sign in again. Unsaved form data may be lost.
                             </li>
                         </ul>
@@ -543,9 +577,10 @@ export default function UserGuide() {
                                 <CardTitle className="text-base">Need help?</CardTitle>
                             </CardHeader>
                             <CardContent className="text-sm text-muted-foreground">
-                                Contact your pharmacy administrator for account issues, password resets, and access
-                                changes. Administrators manage staff accounts under{' '}
+                                Contact your pharmacy administrator for account access changes. Administrators manage
+                                staff accounts and can reset passwords under{' '}
                                 <Link className="text-teal-600 underline underline-offset-2 hover:opacity-80 dark:text-teal-400" to="/admin/users">User Management</Link>.
+                                All staff can change their own password from the sidebar.
                             </CardContent>
                         </Card>
                     </Section>
