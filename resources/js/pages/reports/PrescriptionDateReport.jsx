@@ -41,9 +41,12 @@ export default function PrescriptionDateReport() {
         () =>
             rows.map((r) => ({
                 date: r.date,
-                Dispensed: r.dispensed ?? 0,
+                Dispensed: r.dispensed ?? r.dispatched ?? 0,
                 Rejected: r.rejected ?? 0,
-                Other: Math.max(0, (r.total ?? 0) - (r.dispensed ?? 0) - (r.rejected ?? 0)),
+                Other: Math.max(
+                    0,
+                    (r.total ?? 0) - (r.dispensed ?? r.dispatched ?? 0) - (r.rejected ?? 0),
+                ),
             })),
         [rows],
     );
@@ -181,7 +184,9 @@ export default function PrescriptionDateReport() {
                             <div className="flex flex-wrap items-baseline gap-2 border-b border-border pb-2 text-sm">
                                 <span className="font-semibold">{period.date}</span>
                                 <span className="text-muted-foreground">Total {period.total}</span>
-                                <span className="text-teal-600 dark:text-teal-400">Dispensed {period.dispensed}</span>
+                                <span className="text-teal-600 dark:text-teal-400">
+                                    Dispensed {period.dispensed ?? period.dispatched ?? 0}
+                                </span>
                                 <span className="text-destructive">Rejected {period.rejected}</span>
                             </div>
                             <Table>

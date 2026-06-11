@@ -32,7 +32,7 @@ class ReportController extends Controller
             ->orderBy('created_at')
             ->get();
 
-        /** @var array<string, array{date: string, total: int, dispatched: int, rejected: int, items: list<array<string, mixed>>}> $buckets */
+        /** @var array<string, array{date: string, total: int, dispensed: int, rejected: int, items: list<array<string, mixed>>}> $buckets */
         $buckets = [];
 
         foreach ($prescriptions as $p) {
@@ -47,15 +47,16 @@ class ReportController extends Controller
                 $buckets[$periodKey] = [
                     'date' => $periodKey,
                     'total' => 0,
-                    'dispatched' => 0,
+                    'dispensed' => 0,
                     'rejected' => 0,
                     'items' => [],
                 ];
             }
 
             $buckets[$periodKey]['total']++;
-            if ($p->status === 'dispatched') {
-                $buckets[$periodKey]['dispatched']++;
+            // Report label "dispensed" — same as workflow status `dispatched` (legacy `dispensed` rows included).
+            if (in_array($p->status, ['dispatched', 'dispensed'], true)) {
+                $buckets[$periodKey]['dispensed']++;
             } elseif ($p->status === 'rejected') {
                 $buckets[$periodKey]['rejected']++;
             }

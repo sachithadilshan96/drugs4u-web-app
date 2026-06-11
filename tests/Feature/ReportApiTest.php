@@ -86,7 +86,7 @@ class ReportApiTest extends TestCase
         Prescription::query()->create([
             'customer_id' => $customer->id,
             'pharmacist_id' => $pharmacist->id,
-            'status' => 'dispensed',
+            'status' => 'dispatched',
             'notes' => null,
         ]);
         Prescription::query()->create([
