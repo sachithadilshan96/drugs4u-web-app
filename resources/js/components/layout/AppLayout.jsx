@@ -27,7 +27,10 @@ const NAV_SECTIONS = [
     {
         id: 'overview',
         label: 'Overview',
-        items: [{ to: '/dashboard', label: 'Dashboard', roles: ['pharmacist', 'manager', 'admin'] }],
+        items: [
+            { to: '/dashboard', label: 'Dashboard', roles: ['pharmacist', 'manager', 'admin'] },
+            { to: '/guide', label: 'User guide', roles: ['pharmacist', 'manager', 'admin'], end: true, indent: true },
+        ],
     },
     {
         id: 'customers',

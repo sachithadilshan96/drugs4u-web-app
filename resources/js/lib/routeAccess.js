@@ -17,6 +17,7 @@ const PATH_PREFIX_ROLES = [
     { prefix: '/medicines', roles: ['manager', 'admin'] },
     { prefix: '/inventory', roles: ['pharmacist', 'manager', 'admin'] },
     { prefix: '/dashboard', roles: ['pharmacist', 'manager', 'admin'] },
+    { prefix: '/guide', roles: ['pharmacist', 'manager', 'admin'] },
 ];
 
 /**
@@ -67,6 +68,7 @@ export function requiredRoleForSoftRedirect(pathname) {
 /** @type {Array<{ pattern: RegExp; title: string }>} */
 const TITLE_RULES = [
     { pattern: /^\/dashboard\/?$/, title: 'Dashboard' },
+    { pattern: /^\/guide\/?$/, title: 'User guide' },
     { pattern: /^\/customers\/new\/?$/, title: 'New customer' },
     { pattern: /^\/customers\/[^/]+\/edit\/?$/, title: 'Edit customer' },
     { pattern: /^\/customers\/[^/]+\/?$/, title: 'Customer' },

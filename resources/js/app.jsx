@@ -32,6 +32,7 @@ import StockReport from '@/pages/reports/StockReport';
 import AnomalyReport from '@/pages/reports/AnomalyReport';
 import AlertsLog from '@/pages/alerts/AlertsLog';
 import UserManagement from '@/pages/admin/UserManagement';
+import UserGuide from '@/pages/help/UserGuide';
 import NotFound from '@/pages/errors/NotFound';
 
 class RootErrorBoundary extends Component {
@@ -81,6 +82,7 @@ function AppRoutes() {
                 <Route element={<ProtectedRoute />}>
                     <Route element={<AppLayout />}>
                         <Route path="/dashboard" element={<Dashboard />} />
+                        <Route path="/guide" element={<UserGuide />} />
                         <Route path="/customers" element={<CustomerList />} />
                         <Route path="/customers/new" element={<CustomerForm />} />
                         <Route path="/customers/:id/edit" element={<CustomerForm />} />
